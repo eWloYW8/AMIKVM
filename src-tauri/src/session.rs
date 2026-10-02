@@ -171,6 +171,7 @@ enum Outgoing {
         reply: oneshot::Sender<Result<()>>,
     },
     Mouse(crate::mouse::Operation),
+    ReleaseMouse,
     SharingAnswer(Vec<u8>),
     Handoff {
         bytes: Vec<u8>,
@@ -404,7 +405,7 @@ impl Session {
                     let mut heartbeat = tokio::time::interval(Duration::from_secs(1));
                     let mut mouse_clock = tokio::time::interval(Duration::from_millis(25));
                     let mut had_input = false;
-                    let mut mouse_length = 6;
+                    let mut pointer = input::pointer::State::default();
                     let mut cipher = None;
                     let result = 'writer: loop {
                         tokio::select! {
@@ -413,8 +414,8 @@ impl Session {
                             _ = mouse_clock.tick() => {
                                 let reports = crate::mouse::tick(&writer_app, &writer_snapshot, &writer_video);
                                 if !reports.is_empty() {
-                                    match crate::mouse::write(&writer_app, &mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &reports, None).await {
-                                        Ok(written) => { had_input |= written.sent; mouse_length = 4; },
+                                    match crate::mouse::write(&writer_app, &mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &reports, None, &mut pointer).await {
+                                        Ok(written) => { had_input |= written.sent; },
                                         Err(error) => break Err(error),
                                     }
                                 }
@@ -438,13 +439,12 @@ impl Session {
                                         };
                                         if let Err(error) = transport::write_packet(&mut writer, &release).await { break Err(error); }
                                     }
-                                    let result = crate::mouse::write(&writer_app, &mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &effect.reports, effect.pointer).await;
+                                    let result = crate::mouse::write(&writer_app, &mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &effect.reports, effect.pointer, &mut pointer).await;
                                     crate::mouse::display(&writer_app, &writer_snapshot, &writer_video);
                                     if effect.notify { crate::mouse::notify(&writer_app, &writer_snapshot); }
                                     match result {
                                         Ok(written) => {
                                             had_input |= written.sent;
-                                            if let Some(report) = effect.reports.last() { mouse_length = report.len(); }
                                             if let Some(reply) = reply {
                                                 let result = if written.complete { Ok(()) } else { Err(Error::Invalid("鼠标模式或控制权限变化，操作未完整写出".into())) };
                                                 let _ = reply.send(result);
@@ -455,6 +455,10 @@ impl Session {
                                             break Err(error);
                                         },
                                     }
+                                },
+                                Some(Outgoing::ReleaseMouse) => {
+                                    if !writer_ready.load(Ordering::Acquire) || !writer_snapshot.lock().is_ok_and(|s| s.can_control && s.video_connected) { continue; }
+                                    if let Err(error) = crate::mouse::release(&mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &mut pointer).await { break Err(error); }
                                 },
                                 Some(Outgoing::Bytes(bytes)) => {
                                     if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
@@ -520,12 +524,11 @@ impl Session {
                                     // Release held input while we still own BMC control, before
                                     // sending the transfer. Local input is already disabled.
                                     if had_input {
-                                        for (mouse, report) in [(false, vec![0; 8]), (true, vec![0; mouse_length])] {
-                                            let release = match protocol::input_report_with_cipher(
-                                                writer_sequence.fetch_add(1, Ordering::Relaxed), mouse, &report, cipher.as_ref()
-                                            ) { Ok(bytes) => bytes, Err(error) => break 'writer Err(error) };
-                                            if let Err(error) = transport::write_packet(&mut writer, &release).await { break 'writer Err(error); }
-                                        }
+                                        let release = match protocol::input_report_with_cipher(
+                                            writer_sequence.fetch_add(1, Ordering::Relaxed), false, &[0; 8], cipher.as_ref()
+                                        ) { Ok(bytes) => bytes, Err(error) => break 'writer Err(error) };
+                                        if let Err(error) = transport::write_packet(&mut writer, &release).await { break 'writer Err(error); }
+                                        if let Err(error) = crate::mouse::release(&mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &mut pointer).await { break 'writer Err(error); }
                                         had_input = false;
                                     }
                                     writer_media.stop_active().await;
@@ -547,6 +550,9 @@ impl Session {
                                         let owner = writer_snapshot.lock().ok().map(|s| (s.server_id, s.input_focused && s.video_signal && s.video_connected));
                                         focused && owner.is_some_and(|(id, allowed)| allowed && crate::keyboard::locks::owns(&writer_app, id, token))
                                     });
+                                    let mouse_allowed = !mouse || (crate::mouse::pointer_owner(&writer_app, &writer_snapshot)
+                                        && writer_snapshot.lock().is_ok_and(|s| s.video_connected && s.video_signal && !s.mouse.active()
+                                            && !s.mouse_capture.requested() && ((s.mouse_mode.unwrap_or(2) == 2) == (report.len() == 6))));
                                     // A report queued before a BMC permission change must not
                                     // reach the host after another session acquires control.
                                     if !writer_ready.load(Ordering::Acquire)
@@ -554,6 +560,7 @@ impl Session {
                                         || text_generation.is_some_and(|value| value != *writer_text_generation.borrow())
                                         || reply.as_ref().is_some_and(|reply| reply.is_closed())
                                         || !locks_allowed
+                                        || !mouse_allowed
                                         || (!mouse && report.iter().any(|v| *v != 0)
                                             && writer_snapshot.lock().is_ok_and(|s| s.mouse.active())) {
                                         if let Some(reply) = reply { let _ = reply.send(Err(Error::Invalid("文本输入已停止".into()))); }
@@ -571,7 +578,7 @@ impl Session {
                                         break Err(error);
                                     }
                                     had_input = true;
-                                    if mouse { mouse_length = report.len(); }
+                                    if mouse { pointer.written(&report); }
                                     if let Some(reply) = reply { let _ = reply.send(Ok(())); }
                                 },
                                 Some(Outgoing::Encryption { enabled, requested, reply }) => {
@@ -613,18 +620,22 @@ impl Session {
                     let _ = tokio::time::timeout(Duration::from_secs(2), async {
                         if result.is_ok() {
                             if had_input && writer_snapshot.lock().is_ok_and(|s| s.can_control) {
-                                for (mouse, report) in
-                                    [(false, vec![0; 8]), (true, vec![0; mouse_length])]
-                                {
-                                    if let Ok(bytes) = protocol::input_report_with_cipher(
-                                        writer_sequence.fetch_add(1, Ordering::Relaxed),
-                                        mouse,
-                                        &report,
-                                        cipher.as_ref(),
-                                    ) {
-                                        let _ = writer.write_all(&bytes).await;
-                                    }
+                                if let Ok(bytes) = protocol::input_report_with_cipher(
+                                    writer_sequence.fetch_add(1, Ordering::Relaxed),
+                                    false,
+                                    &[0; 8],
+                                    cipher.as_ref(),
+                                ) {
+                                    let _ = writer.write_all(&bytes).await;
                                 }
+                                let _ = crate::mouse::release(
+                                    &mut writer,
+                                    &writer_snapshot,
+                                    &writer_sequence,
+                                    cipher.as_ref(),
+                                    &mut pointer,
+                                )
+                                .await;
                             }
                             let _ = writer.write_all(&protocol::command(8, 0)).await;
                         }
@@ -2101,20 +2112,10 @@ impl Session {
             return Ok(());
         }
         self.send_keyboard(&mut keyboard, report).await?;
-        let mode = self
-            .snapshot
-            .lock()
-            .map_err(|_| Error::Invalid("Session unavailable".into()))?
-            .mouse_mode;
-        self.hid(
-            true,
-            if mode.unwrap_or(2) == 2 {
-                &[0; 6]
-            } else {
-                &[0; 4]
-            },
-        )
-        .await
+        self.sender
+            .send(Outgoing::ReleaseMouse)
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))
     }
 
     pub async fn mouse_command(

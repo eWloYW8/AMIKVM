@@ -8,6 +8,7 @@ pub mod encryption;
 pub mod layout;
 pub mod macros;
 pub mod mouse;
+pub mod pointer;
 pub mod routing;
 
 #[derive(Deserialize)]
@@ -274,7 +275,7 @@ pub fn shortcut(name: &str) -> Result<[u8; 8]> {
     })
 }
 
-pub fn mouse(event: &Event, absolute: bool) -> Result<Vec<Vec<u8>>> {
+pub fn mouse(event: &Event, absolute: bool, source_width: u32) -> Result<Vec<Vec<u8>>> {
     let Event::Pointer {
         buttons,
         x,
@@ -298,8 +299,15 @@ pub fn mouse(event: &Event, absolute: bool) -> Result<Vec<Vec<u8>>> {
         (-wheel.signum()) as i8
     };
     if absolute {
+        // USBMouseRep uses 800 logical pixels for an 832-pixel source.
+        // Apply this before quantization, independently of output/zoom size.
+        let x = if source_width == 832 {
+            x.clamp(0.0, *width as f64) * 832.0 / 800.0
+        } else {
+            *x
+        };
         return Ok(vec![
-            protocol::absolute_mouse(*buttons, *x, *y, *width, *height, scroll)?.to_vec(),
+            protocol::absolute_mouse(*buttons, x, *y, *width, *height, scroll)?.to_vec(),
         ]);
     }
     let mut remaining_x = dx.clamp(-4096.0, 4096.0).round() as i32;

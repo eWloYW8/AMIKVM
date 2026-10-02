@@ -2300,7 +2300,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                 vec![
                     node(
                         "video",
-                        json!({"serverId":s.id,"enabled":controllable && matches!(ui.dialog,Dialog::None),"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"captureToken":if matches!(ui.dialog,Dialog::None) && !paused { snapshot.and_then(|v|v.mouse_capture.token) } else {None},"style":frame_style}),
+                        json!({"serverId":s.id,"enabled":controllable && !paused && snapshot.is_some_and(|v|v.video_signal) && matches!(ui.dialog,Dialog::None),"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"captureToken":if matches!(ui.dialog,Dialog::None) && !paused { snapshot.and_then(|v|v.mouse_capture.token) } else {None},"style":frame_style}),
                         vec![],
                     ),
                     group(

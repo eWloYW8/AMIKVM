@@ -54,6 +54,13 @@ fn context(s: &mut Snapshot) -> bool {
     let released = !crate::pointer_capture::eligible(s) && s.mouse_capture.release();
     changed || released
 }
+pub fn pointer_owner(app: &AppHandle, snapshot: &Arc<Mutex<Snapshot>>) -> bool {
+    let id = snapshot.lock().ok().map(|s| s.server_id);
+    // Native window getters can wait for the UI thread. Hold no state mutex.
+    app.get_webview_window("main")
+        .is_some_and(|w| w.is_focused().unwrap_or(false))
+        && id.is_some_and(|id| crate::pointer_capture::selected(app, id))
+}
 pub fn process(
     app: &AppHandle,
     snapshot: &Arc<Mutex<Snapshot>>,
@@ -73,6 +80,9 @@ pub fn process(
         Operation::Pointer(event) => ((None, None, Some(event)), None),
     };
     let result = (|| {
+        if operation.2.is_some() && !pointer_owner(app, snapshot) {
+            return Ok(Effect::default());
+        }
         let mut s = snapshot
             .lock()
             .map_err(|_| Error::Invalid("Mouse state unavailable".into()))?;
@@ -117,7 +127,7 @@ pub fn process(
                 input::Event::Pointer { capture, .. } => *capture,
                 _ => None,
             };
-            if s.mouse.active() || !s.mouse_capture.allows(token) {
+            if !s.video_signal || s.mouse.active() || !s.mouse_capture.allows(token) {
                 return Ok(Effect::default());
             }
             if let input::Event::Pointer {
@@ -138,7 +148,12 @@ pub fn process(
                     (*dx, *dy) = s.mouse_capture.movement(*x, *y, *width, *height, *entered);
                 }
             }
-            let reports = input::mouse(&event, s.mouse_mode.unwrap_or(2) == 2)?;
+            let source_width = if s.video_source_width > 0 {
+                s.video_source_width
+            } else {
+                s.video_width
+            };
+            let reports = input::mouse(&event, s.mouse_mode.unwrap_or(2) == 2, source_width)?;
             s.mouse.movement(&reports);
             return Ok(Effect {
                 reports,
@@ -235,24 +250,24 @@ pub async fn write<W: AsyncWrite + Unpin>(
     cipher: Option<&input::encryption::Cipher>,
     reports: &[Vec<u8>],
     pointer: Option<Option<Uuid>>,
+    state: &mut input::pointer::State,
 ) -> Result<Written> {
     let mut sent = false;
     for report in reports {
-        if pointer.is_some_and(|token| token.is_some()) {
-            let id = snapshot.lock().ok().map(|s| s.server_id);
-            if !id.is_some_and(|id| crate::pointer_capture::selected(app, id)) {
-                return Ok(Written {
-                    sent,
-                    complete: false,
-                });
-            }
+        if pointer.is_some() && !pointer_owner(app, snapshot) {
+            return Ok(Written {
+                sent,
+                complete: false,
+            });
         }
         if !snapshot.lock().is_ok_and(|s| {
             s.can_control
                 && s.video_connected
                 && ((s.mouse_mode.unwrap_or(2) == 2) == (report.len() == 6))
                 && pointer.is_none_or(|token| {
-                    s.mouse_capture.allows(token)
+                    s.video_signal
+                        && !s.mouse.active()
+                        && s.mouse_capture.allows(token)
                         && (token.is_none() || crate::pointer_capture::eligible(&s))
                 })
         }) {
@@ -268,10 +283,37 @@ pub async fn write<W: AsyncWrite + Unpin>(
             cipher,
         )?;
         transport::write_packet(writer, &bytes).await?;
+        state.written(report);
         sent = true;
     }
     Ok(Written {
         sent,
         complete: true,
     })
+}
+
+pub async fn release<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    snapshot: &Arc<Mutex<Snapshot>>,
+    sequence: &AtomicU32,
+    cipher: Option<&input::encryption::Cipher>,
+    state: &mut input::pointer::State,
+) -> Result<()> {
+    let absolute = snapshot
+        .lock()
+        .map_err(|_| Error::Invalid("Mouse state unavailable".into()))?
+        .mouse_mode
+        .unwrap_or(2)
+        == 2;
+    if let Some(report) = state.release(absolute) {
+        let bytes = protocol::input_report_with_cipher(
+            sequence.fetch_add(1, Ordering::Relaxed),
+            true,
+            &report,
+            cipher,
+        )?;
+        transport::write_packet(writer, &bytes).await?;
+        state.written(&report);
+    }
+    Ok(())
 }
