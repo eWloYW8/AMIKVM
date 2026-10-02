@@ -95,12 +95,17 @@ impl Manager {
                 },
             ));
         }
-        if self
-            .snapshot
-            .lock()
-            .is_ok_and(|s| s.video_connected && !s.can_control)
         {
-            return Err(Error::Authentication("仅查看会话不能启动介质重定向".into()));
+            let snapshot = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            if snapshot.phase != "connected" {
+                return Err(Error::Invalid("会话未连接，无法启动介质重定向".into()));
+            }
+            if snapshot.video_connected && !snapshot.can_control {
+                return Err(Error::Authentication("仅查看会话不能启动介质重定向".into()));
+            }
         }
         let source = path.clone();
         let path = tokio::task::spawn_blocking(move || source.canonicalize())

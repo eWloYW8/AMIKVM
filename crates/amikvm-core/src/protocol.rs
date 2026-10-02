@@ -97,6 +97,40 @@ pub fn authenticate(
     Ok(bytes)
 }
 
+/// JViewer hY(): 374-byte body, with a 130-byte token field and the old session ID.
+pub fn reconnect(
+    token: &str,
+    local_ip: &str,
+    local_name: &str,
+    mac: &str,
+    session_id: u8,
+) -> Result<Vec<u8>> {
+    let mut bytes = vec![0; 382];
+    bytes[..8].copy_from_slice(
+        &Header {
+            kind: 58,
+            length: 374,
+            status: 0,
+        }
+        .bytes(),
+    );
+    for (start, end, value) in [
+        (8, 138, token),
+        (138, 203, local_ip),
+        (203, 332, local_name),
+        (332, 381, mac),
+    ] {
+        if value.len() >= end - start || value.contains('\0') {
+            return Err(Error::Invalid(
+                "Session identity field is invalid or too long".into(),
+            ));
+        }
+        bytes[start..start + value.len()].copy_from_slice(value.as_bytes());
+    }
+    bytes[381] = session_id;
+    Ok(bytes)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Control {

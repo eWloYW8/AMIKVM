@@ -187,6 +187,16 @@ impl WebSession {
         crate::protocol::packet(21, 0, self.cookie.as_bytes())
     }
 
+    pub fn reconnect_packet(
+        &self,
+        local_ip: &str,
+        local_name: &str,
+        mac: &str,
+        session_id: u8,
+    ) -> Result<Vec<u8>> {
+        crate::protocol::reconnect(&self.token, local_ip, local_name, mac, session_id)
+    }
+
     pub async fn login(server: Server, password: &str) -> Result<Self> {
         Self::login_with_discovery(server, password, true).await
     }

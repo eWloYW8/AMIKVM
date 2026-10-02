@@ -9,6 +9,7 @@ pub mod preferences;
 pub mod protocol;
 pub mod recording;
 pub mod recordings;
+pub mod recovery;
 pub mod server;
 pub mod service;
 pub mod sharing;

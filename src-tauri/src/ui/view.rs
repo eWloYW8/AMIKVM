@@ -264,6 +264,17 @@ fn about() -> Node {
     )
 }
 
+fn recovery_message(snapshot: &Snapshot) -> String {
+    let recovery = &snapshot.recovery;
+    lformat!(
+        "{} · 重试 {}/{} · {} 秒",
+        tr(recovery.stage.label()),
+        recovery.attempt,
+        recovery.limit,
+        recovery.seconds_remaining
+    )
+}
+
 fn connection_info(server: &Server, snapshot: Option<&Snapshot>) -> Node {
     let mut rows = vec![heading(tr("连接信息"), &server.name, "Info")];
     if let Some(snapshot) = snapshot {
@@ -283,6 +294,12 @@ fn connection_info(server: &Server, snapshot: Option<&Snapshot>) -> Node {
                     "about-row",
                     vec![label("span", "", caption), label("strong", "", value)],
                 ));
+            }
+        }
+        if snapshot.recovery.stage != amikvm_core::recovery::Stage::Idle {
+            rows.push(label("p", "input-help", recovery_message(snapshot)));
+            if let Some(error) = &snapshot.recovery.last_error {
+                rows.push(label("p", "input-help", error));
             }
         }
         if let Some(notice) = snapshot.service.notice {
@@ -429,6 +446,7 @@ fn phase(s: Option<&Snapshot>) -> &'static str {
     match s.map(|s| s.phase.as_str()) {
         Some("authenticating") => tr("正在登录"),
         Some("negotiating") => tr("正在连接"),
+        Some("reconnecting") => tr("正在自动重连"),
         Some("connected") => tr("已连接"),
         Some("error") => tr("连接失败"),
         _ => tr("未连接"),
@@ -437,7 +455,7 @@ fn phase(s: Option<&Snapshot>) -> &'static str {
 fn status(s: Option<&Snapshot>) -> &'static str {
     match s.map(|s| s.phase.as_str()) {
         Some("connected") => "online",
-        Some("authenticating" | "negotiating") => "pending",
+        Some("authenticating" | "negotiating" | "reconnecting") => "pending",
         _ => "",
     }
 }
@@ -967,7 +985,10 @@ fn card(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                     "Camera",
                     json!({"action":"capture_dialog","id":s.id,"kind":"preview"}),
                     snapshot.is_some_and(|s| {
-                        matches!(s.phase.as_str(), "authenticating" | "negotiating")
+                        matches!(
+                            s.phase.as_str(),
+                            "authenticating" | "negotiating" | "reconnecting"
+                        )
                     }),
                 ),
                 button(
@@ -976,7 +997,10 @@ fn card(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                     "Camera",
                     json!({"action":"capture_dialog","id":s.id,"kind":"crash"}),
                     snapshot.is_some_and(|s| {
-                        matches!(s.phase.as_str(), "authenticating" | "negotiating")
+                        matches!(
+                            s.phase.as_str(),
+                            "authenticating" | "negotiating" | "reconnecting"
+                        )
                     }),
                 ),
                 button(
@@ -2152,6 +2176,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
     let title = match snapshot.map(|v| v.phase.as_str()) {
         Some("authenticating") => tr("正在登录服务器"),
         Some("negotiating") => tr("正在建立控制台连接"),
+        Some("reconnecting") => tr("正在自动重连"),
         Some("connected") if snapshot.is_some_and(|s| s.web_only) => tr("Web 会话已连接"),
         Some("connected") if !connected => tr("虚拟介质会话"),
         Some("connected") => tr("等待远程画面"),
@@ -2202,8 +2227,13 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                                 "p",
                                 "",
                                 snapshot
-                                    .and_then(|s| s.message.as_ref())
-                                    .map(|message| translated(message).into_owned())
+                                    .filter(|s| s.phase == "reconnecting")
+                                    .map(recovery_message)
+                                    .or_else(|| {
+                                        snapshot
+                                            .and_then(|s| s.message.as_ref())
+                                            .map(|message| translated(message).into_owned())
+                                    })
                                     .unwrap_or_else(|| format!("{}:{}", s.host, s.web_port)),
                             ),
                         ],

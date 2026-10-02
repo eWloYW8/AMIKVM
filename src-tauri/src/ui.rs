@@ -418,7 +418,7 @@ pub enum Intent {
 pub fn active(snapshot: &Snapshot) -> bool {
     matches!(
         snapshot.phase.as_str(),
-        "authenticating" | "negotiating" | "connected"
+        "authenticating" | "negotiating" | "reconnecting" | "connected"
     )
 }
 

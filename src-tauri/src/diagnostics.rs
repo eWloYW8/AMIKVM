@@ -38,6 +38,19 @@ pub fn session(app: &AppHandle, s: &crate::session::Snapshot) {
         app,
         Category::Session,
         id,
+        "recovery",
+        "重连状态已改变",
+        json!({"stage":s.recovery.stage,"attempt":s.recovery.attempt,"limit":s.recovery.limit,"remaining":s.recovery.seconds_remaining,"error":s.recovery.last_error}),
+        if s.recovery.stage == amikvm_core::recovery::Stage::Exhausted {
+            Level::Error
+        } else {
+            Level::Info
+        },
+    );
+    changed(
+        app,
+        Category::Session,
+        id,
         "phase",
         "会话状态已改变",
         json!({"phase":s.phase,"message":s.message}),

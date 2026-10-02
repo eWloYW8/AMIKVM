@@ -2338,5 +2338,45 @@
   "虚拟介质配置正在更新，请稍后重试": [
     "Virtual media configuration is updating; retry shortly",
     "La configuration des médias virtuels est en cours de mise à jour ; réessayez dans un instant"
+  ],
+  "连接正常": [
+    "Connection ready",
+    "Connexion prête"
+  ],
+  "等待重试": [
+    "Waiting to retry",
+    "En attente de nouvelle tentative"
+  ],
+  "重新建立连接": [
+    "Reconnecting",
+    "Reconnexion en cours"
+  ],
+  "恢复会话认证": [
+    "Restoring session authentication",
+    "Rétablissement de l’authentification"
+  ],
+  "重试次数已用尽": [
+    "Retry limit reached",
+    "Nombre maximal de tentatives atteint"
+  ],
+  "连接中断，正在自动重试": [
+    "Connection interrupted; retrying automatically",
+    "Connexion interrompue ; nouvelle tentative automatique"
+  ],
+  "正在自动重连": [
+    "Reconnecting automatically",
+    "Reconnexion automatique"
+  ],
+  "重连状态已改变": [
+    "Reconnection state changed",
+    "État de reconnexion modifié"
+  ],
+  "会话未连接，无法启动介质重定向": [
+    "Connect the session before starting media redirection",
+    "Connectez la session avant la redirection de médias"
+  ],
+  "{} · 重试 {}/{} · {} 秒": [
+    "{} · Retry {}/{} · {} s",
+    "{} · Tentative {}/{} · {} s"
   ]
 }
