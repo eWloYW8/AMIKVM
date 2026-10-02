@@ -13,6 +13,26 @@ use std::{
 use tokio::{io::AsyncWriteExt, sync::watch, time::timeout};
 use uuid::Uuid;
 
+#[derive(Clone)]
+pub enum Source {
+    Image(PathBuf),
+    Device(super::device::Device),
+}
+impl Source {
+    pub fn path(&self) -> &std::path::Path {
+        match self {
+            Self::Image(path) => path,
+            Self::Device(device) => &device.path,
+        }
+    }
+    pub fn groups(&self) -> Vec<String> {
+        match self {
+            Self::Image(_) => vec![],
+            Self::Device(device) => device.groups.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
@@ -30,6 +50,8 @@ pub struct Status {
     pub requests: u64,
     pub capacity: u64,
     pub cache: Option<super::cache::Stats>,
+    pub physical: bool,
+    pub device_groups: Vec<String>,
 }
 impl Status {
     pub fn pending(
@@ -54,6 +76,8 @@ impl Status {
             requests: 0,
             capacity: 0,
             cache: None,
+            physical: false,
+            device_groups: vec![],
         }
     }
     pub fn active(&self) -> bool {
@@ -70,6 +94,14 @@ impl Redirector {
     pub async fn start(
         web: Arc<WebSession>,
         path: PathBuf,
+        status: Status,
+        usb: bool,
+    ) -> Result<Self> {
+        Self::start_source(web, Source::Image(path), status, usb).await
+    }
+    pub async fn start_source(
+        web: Arc<WebSession>,
+        source: Source,
         mut status: Status,
         usb: bool,
     ) -> Result<Self> {
@@ -96,9 +128,14 @@ impl Redirector {
         }
         let kind = status.kind;
         let readonly = status.readonly;
-        let image = tokio::task::spawn_blocking(move || Image::open(&path, kind, readonly))
-            .await
-            .map_err(|e| Error::Protocol(e.to_string()))??;
+        status.physical = matches!(source, Source::Device(_));
+        status.device_groups = source.groups();
+        let image = tokio::task::spawn_blocking(move || match source {
+            Source::Image(path) => Image::open(&path, kind, readonly),
+            Source::Device(device) => Image::open_device(&device, kind, readonly),
+        })
+        .await
+        .map_err(|e| Error::Protocol(e.to_string()))??;
         status.readonly = image.readonly;
         status.capacity = image.blocks * image.block_size as u64;
         let image = Arc::new(Mutex::new(image));
@@ -121,8 +158,18 @@ impl Redirector {
             .encode()?;
         let name = std::path::Path::new(&status.source)
             .file_name()
-            .unwrap_or_default()
-            .to_string_lossy();
+            .map(|name| name.to_string_lossy())
+            // A Windows device namespace/GUID path can consist entirely of a
+            // prefix component, so file_name() alone would report no name.
+            .unwrap_or_else(|| {
+                std::borrow::Cow::Borrowed(
+                    status
+                        .source
+                        .rsplit(['\\', '/'])
+                        .find(|v| !v.is_empty())
+                        .unwrap_or_default(),
+                )
+            });
         let info = Packet::device_info(&name, status.slot)?.encode()?;
         timeout(Duration::from_secs(10), async {
             connection.stream.write_all(&auth).await?;
@@ -166,8 +213,40 @@ impl Redirector {
         status.instance = ack.instance();
         status.boost = cd && code == 27;
         status.phase = "connected".into();
+        let physical = image.lock().unwrap().physical();
+        let (device_tx, mut device_rx) = watch::channel(Some(status.capacity));
         let (status_tx, status_rx) = watch::channel(status);
         let (cancel, mut cancel_rx) = watch::channel(false);
+        let monitor = if physical {
+            let image = image.clone();
+            let mut cancel = cancel.subscribe();
+            Some(tokio::spawn(async move {
+                loop {
+                    tokio::select! {biased; _=cancel.changed()=>break,_=tokio::time::sleep(Duration::from_secs(1))=>{}}
+                    let image = image.clone();
+                    let check = tokio::task::spawn_blocking(move || {
+                        image.try_lock().ok().map(|mut image| image.poll_device())
+                    })
+                    .await;
+                    if let Ok(Some(value)) = check {
+                        device_tx.send_if_modified(|old| {
+                            if *old == value {
+                                false
+                            } else {
+                                *old = value;
+                                true
+                            }
+                        });
+                        if value.is_none() {
+                            break;
+                        }
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+        let monitor_cancel = cancel.clone();
         let (finish_tx, finished) = watch::channel(false);
         let (mut reader, mut writer) = tokio::io::split(connection.stream);
         tokio::spawn(async move {
@@ -185,6 +264,13 @@ impl Redirector {
                     let request = loop {
                         tokio::select! {
                             _ = cancel_rx.changed() => break None,
+                            changed=device_rx.changed(),if physical => {
+                                if *cancel_rx.borrow(){break None;}
+                                let capacity=*device_rx.borrow_and_update();
+                                if capacity.is_none(){stop_reason="removed";break None;}
+                                if changed.is_err(){return Err(Error::Protocol("Physical device monitor stopped".into()));}
+                                state.capacity=capacity.unwrap();status_tx.send_replace(state.clone());
+                            }
                             request = &mut reading => break Some(request.map_err(|_| Error::Timeout("Virtual media response"))??),
                             _ = heartbeat.tick() => {
                                 let mut cache_changed = false;
@@ -231,7 +317,7 @@ impl Redirector {
                         .map_err(|_| Error::Timeout("Media response send"))??;
                     last_sent=Instant::now();
                     state.requests += 1;
-                    if successful && matches!(opcode, 0x08 | 0x28 | 0xa8) { state.bytes_read += data_length; }
+                    if successful && matches!(opcode, 0x08 | 0x28 | 0xa8 | 0xbe | 0xb9) { state.bytes_read += data_length; }
                     if successful && matches!(opcode, 0x0a | 0x2a | 0xaa) {
                         state.bytes_written += request_size.saturating_sub(29) as u64;
                     }
@@ -242,6 +328,11 @@ impl Redirector {
                 }
                 Ok(())
             }.await;
+            // Complete any native poll before releasing device handles/volume locks.
+            if let Some(monitor) = monitor {
+                let _ = monitor_cancel.send(true);
+                let _ = monitor.await;
+            }
             let disconnect = Packet::command(247, state.instance, &[]).encode();
             if let Ok(bytes) = disconnect {
                 let _ = timeout(Duration::from_secs(2), writer.write_all(&bytes)).await;

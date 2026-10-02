@@ -1930,8 +1930,9 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 children,
             )
         }
-        Dialog::Media(id, kind) => {
+        Dialog::Media(id, kind) | Dialog::PhysicalMedia(id, kind) => {
             use amikvm_core::media::scsi::Kind;
+            let physical = matches!(ui.dialog, Dialog::PhysicalMedia(..));
             let snapshot = sessions.iter().find(|s| s.server_id == id)?;
             let config = snapshot.config.as_ref()?;
             let cd = kind == Kind::Cdrom;
@@ -1960,16 +1961,71 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             selector.props["options"] = json!(choices);
             let mut fields = vec![
                 heading(
-                    match kind {
-                        Kind::Cdrom => tr("重定向 CD/DVD 镜像"),
-                        Kind::HardDisk => tr("重定向硬盘 / USB 镜像"),
-                        Kind::Floppy => tr("重定向软盘镜像"),
+                    if physical {
+                        match kind {
+                            Kind::Cdrom => tr("重定向实体 CD/DVD"),
+                            Kind::HardDisk => tr("重定向实体硬盘 / USB"),
+                            Kind::Floppy => tr("重定向实体软盘"),
+                        }
+                    } else {
+                        match kind {
+                            Kind::Cdrom => tr("重定向 CD/DVD 镜像"),
+                            Kind::HardDisk => tr("重定向硬盘 / USB 镜像"),
+                            Kind::Floppy => tr("重定向软盘镜像"),
+                        }
                     },
-                    tr("选择镜像后作为远程服务器的 USB 介质使用。"),
+                    if physical {
+                        tr("选择本机设备，连接为远程服务器的虚拟介质。列表会自动刷新。")
+                    } else {
+                        tr("选择镜像后作为远程服务器的 USB 介质使用。")
+                    },
                     "HardDrive",
                 ),
                 selector,
             ];
+            if physical {
+                let entries: Vec<_> = ui
+                    .devices
+                    .entries
+                    .iter()
+                    .filter(|d| d.kind == kind)
+                    .collect();
+                let mut choice = field(
+                    "device",
+                    tr("实体设备"),
+                    "select",
+                    json!({"required":true,"disabled":ui.devices.loading}),
+                );
+                let mut options = vec![json!({"value":"","label":tr("请选择实体设备")})];
+                options.extend(entries.iter().map(|d|json!({"value":super::devices::choice(d),"label":format!("{} · {} · {}{}",d.label,d.path.display(),byte_size(d.capacity),if d.readonly {format!(" · {}",tr("只读"))}else{String::new()})})));
+                choice.props["options"] = json!(options);
+                fields.push(choice);
+                fields.push(button(
+                    "button secondary",
+                    if ui.devices.loading {
+                        tr("正在读取设备列表")
+                    } else {
+                        tr("刷新设备列表")
+                    },
+                    "RefreshCw",
+                    json!({"action":"physical_media_refresh"}),
+                    ui.devices.loading,
+                ));
+                if let Some(error) = &ui.devices.error {
+                    fields.push(label("p", "media-error", translated(error)));
+                } else if entries.is_empty() && !ui.devices.loading {
+                    fields.push(label(
+                        "p",
+                        "input-help",
+                        tr("没有找到此类型的实体设备。连接设备后可刷新列表，或改用镜像文件。"),
+                    ));
+                }
+                fields.push(label(
+                    "p",
+                    "input-help",
+                    tr("访问实体设备需要系统授予相应权限；设备移除后连接会自动结束。"),
+                ));
+            }
             if !cd {
                 fields.push(field(
                     "readonly",
@@ -1988,7 +2044,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 fields.push(label(
                     "p",
                     "input-help",
-                    tr("关闭只读后，远程系统的写入会保存到所选镜像。"),
+                    if physical {tr("关闭只读后，远程写入将直接修改实体设备。Windows 会尝试锁定卷；Linux 和 macOS 请先卸载本地文件系统。")}else{tr("关闭只读后，远程系统的写入会保存到所选镜像。")},
                 ));
             } else {
                 fields.push(field(
@@ -2000,15 +2056,40 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 fields.push(label(
                     "p",
                     "input-help",
-                    tr("CD/DVD 镜像以只读方式连接。BMC 决定是否允许加速模式。"),
+                    if physical {
+                        tr("实体 CD/DVD 以只读方式连接。BMC 决定是否允许加速模式。")
+                    } else {
+                        tr("CD/DVD 镜像以只读方式连接。BMC 决定是否允许加速模式。")
+                    },
                 ));
             }
-            fields.push(actions(tr("选择镜像并连接")));
+            if physical && cfg!(target_os = "macos") && cd {
+                fields.push(label(
+                    "p",
+                    "input-help",
+                    tr("当前 macOS 支持读取数据光盘；音频光盘和原生光驱控制仍待实现。"),
+                ));
+            }
+            let mut footer = actions(if physical {
+                tr("连接实体设备")
+            } else {
+                tr("选择镜像并连接")
+            });
+            if physical {
+                footer.children[1].props["disabled"] = json!(
+                    ui.devices.loading
+                        || !ui.devices.entries.iter().any(|d| d.kind == kind)
+                        || slots.is_empty()
+                        || snapshot.phase != "connected"
+                );
+            }
+            fields.push(footer);
+            fields.push(button("button secondary wide",if physical{tr("改用镜像文件")}else{tr("选择实体设备")},"HardDrive",json!({"action":if physical{"media_dialog"}else{"physical_media_dialog"},"id":id,"kind":kind}),false));
             (
-                format!("media-{id}-{kind:?}"),
-                "modal small",
-                json!({"action":"media_start","id":id,"kind":kind}),
-                json!({"slot":slots.first().map(|v|v.to_string()).unwrap_or_default(),"readonly":true,"usb":true,"boost":false}),
+                format!("media-{id}-{kind:?}-{physical}"),
+                if physical { "modal" } else { "modal small" },
+                json!({"action":if physical{"physical_media_start"}else{"media_start"},"id":id,"kind":kind}),
+                json!({"device":"","slot":slots.first().map(|v|v.to_string()).unwrap_or_default(),"readonly":true,"usb":true,"boost":false}),
                 fields,
             )
         }
@@ -3475,6 +3556,7 @@ fn media(server: &Server, snapshot: Option<&Snapshot>) -> Node {
                 "ejected" => tr("远程已弹出"),
                 "terminated" => tr("BMC 已终止"),
                 "service_restart" => tr("BMC 服务重启"),
+                "removed" => tr("实体设备已移除"),
                 "error" => tr("连接失败"),
                 _ => tr("已断开"),
             };
@@ -3510,6 +3592,13 @@ fn media(server: &Server, snapshot: Option<&Snapshot>) -> Node {
                     ),
                 ),
             ];
+            if m.physical {
+                item.push(label(
+                    "small",
+                    "",
+                    lformat!("实体设备 · 容量 {}", byte_size(m.capacity)),
+                ));
+            }
             if let Some(cache) = m.cache.filter(|c| c.enabled) {
                 item.push(label(
                     "small",

@@ -3,7 +3,7 @@ use amikvm_core::{
     Error, Result,
     auth::WebSession,
     media::{
-        redirect::{Redirector, Status},
+        redirect::{Redirector, Source, Status},
         scsi::Kind,
     },
 };
@@ -33,6 +33,7 @@ impl Slot {
 }
 struct Pending {
     path: PathBuf,
+    groups: Vec<String>,
     finished: watch::Receiver<()>,
 }
 #[derive(Default)]
@@ -82,6 +83,30 @@ impl Manager {
         usb: bool,
         boost: bool,
     ) -> Result<()> {
+        self.start_source(kind, number, Source::Image(path), readonly, usb, boost)
+            .await
+    }
+    pub async fn start_device(
+        &self,
+        kind: Kind,
+        number: u8,
+        device: amikvm_core::media::device::Device,
+        readonly: bool,
+        usb: bool,
+        boost: bool,
+    ) -> Result<()> {
+        self.start_source(kind, number, Source::Device(device), readonly, usb, boost)
+            .await
+    }
+    async fn start_source(
+        &self,
+        kind: Kind,
+        number: u8,
+        mut source: Source,
+        readonly: bool,
+        usb: bool,
+        boost: bool,
+    ) -> Result<()> {
         let mut generation_rx = self.generation.subscribe();
         let generation = *generation_rx.borrow_and_update();
         if (self.closed.load(Ordering::Acquire) || self.reconfiguring.load(Ordering::Acquire))
@@ -107,10 +132,15 @@ impl Manager {
                 return Err(Error::Authentication("仅查看会话不能启动介质重定向".into()));
             }
         }
-        let source = path.clone();
-        let path = tokio::task::spawn_blocking(move || source.canonicalize())
-            .await
-            .map_err(|e| Error::Protocol(e.to_string()))??;
+        if let Source::Image(path) = source {
+            source = Source::Image(
+                tokio::task::spawn_blocking(move || path.canonicalize())
+                    .await
+                    .map_err(|e| Error::Protocol(e.to_string()))??,
+            );
+        }
+        let path = source.path().to_owned();
+        let groups = source.groups();
         let slot = Slot::new(kind, number);
         // A dropped sender tells stop_active that this start has finished
         // dropping its connection (or stopped any worker it created).
@@ -148,15 +178,32 @@ impl Manager {
                     "This image is already being redirected".into(),
                 ));
             }
+            if !groups.is_empty()
+                && (registry
+                    .pending
+                    .values()
+                    .any(|p| p.groups.iter().any(|g| groups.contains(g)))
+                    || registry.handles.values().any(|h| {
+                        let status = h.status.borrow();
+                        status.active() && status.device_groups.iter().any(|g| groups.contains(g))
+                    }))
+            {
+                return Err(Error::Invalid(
+                    "所选设备或其分区已经在其他介质实例中连接".into(),
+                ));
+            }
             registry.pending.insert(
                 slot,
                 Pending {
                     path: path.clone(),
+                    groups: groups.clone(),
                     finished,
                 },
             );
         }
-        let pending = Status::pending(kind, number, &path, readonly, boost);
+        let mut pending = Status::pending(kind, number, &path, readonly, boost);
+        pending.physical = matches!(source, Source::Device(_));
+        pending.device_groups = groups;
         self.update(pending.clone());
         let web = self.web.lock().unwrap().clone();
         let mut parent_cancel = self.parent_cancel.clone();
@@ -164,7 +211,7 @@ impl Manager {
             biased;
             _ = parent_cancel.changed() => Err(Error::Invalid("Session is closing".into())),
             _ = generation_rx.changed() => Err(Error::Invalid("介质连接已在配置更新、权限切换或关闭过程中取消".into())),
-            result = Redirector::start(web, path, pending.clone(), usb) => result,
+            result = Redirector::start_source(web, source, pending.clone(), usb) => result,
         };
         let mut registry = self.registry.lock().await;
         let redirector = match result {

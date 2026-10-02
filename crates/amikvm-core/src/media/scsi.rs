@@ -28,11 +28,20 @@ pub struct Image {
     sense: [u8; 3],
     cache: Option<super::cache::ReadAhead>,
     cache_attempted: bool,
+    physical: Option<super::device::Device>,
+    _device_locks: Vec<File>,
+    removed: bool,
+    _device_lease: Option<super::device::Lease>,
 }
 impl Image {
     pub fn open(path: &Path, kind: Kind, readonly: bool) -> Result<Self> {
         let readonly = readonly || kind == Kind::Cdrom;
         let mut file = OpenOptions::new().read(true).write(!readonly).open(path)?;
+        if !file.metadata()?.is_file() {
+            return Err(Error::Invalid(
+                "镜像入口只接受普通文件，请从实体设备列表选择设备".into(),
+            ));
+        }
         if readonly {
             fs2::FileExt::try_lock_shared(&file)
         } else {
@@ -80,10 +89,89 @@ impl Image {
             sense: [0; 3],
             cache: None,
             cache_attempted: false,
+            physical: None,
+            _device_locks: vec![],
+            removed: false,
+            _device_lease: None,
         })
     }
+    pub fn open_device(
+        expected: &super::device::Device,
+        kind: Kind,
+        readonly: bool,
+    ) -> Result<Self> {
+        let opened = super::device::open(expected, kind, readonly || kind == Kind::Cdrom)?;
+        let blocks = opened.device.capacity / u64::from(opened.device.block_size);
+        let tracks = if kind == Kind::Cdrom {
+            vec![super::nrg::Track {
+                number: 1,
+                lba: 0,
+                blocks,
+                offset: 0,
+                sector_size: opened.device.block_size.try_into().unwrap_or(2048),
+                data_offset: Some(0),
+            }]
+        } else {
+            vec![]
+        };
+        Ok(Self {
+            file: opened.file,
+            kind,
+            readonly: readonly || kind == Kind::Cdrom,
+            block_size: opened.device.block_size,
+            blocks,
+            tracks,
+            ejected: false,
+            prevent: false,
+            attention: opened.changed || kind != Kind::Cdrom,
+            sense: [0; 3],
+            cache: None,
+            cache_attempted: true,
+            physical: Some(opened.device),
+            _device_locks: opened.locks,
+            removed: false,
+            _device_lease: Some(opened.lease),
+        })
+    }
+    pub fn physical(&self) -> bool {
+        self.physical.is_some()
+    }
+    /// Called only from a blocking worker, including while the BMC is idle.
+    pub fn poll_device(&mut self) -> Option<u64> {
+        let Some(device) = self.physical.as_ref() else {
+            return Some(self.blocks * u64::from(self.block_size));
+        };
+        if !super::device::present(&self.file, device) {
+            self.removed = true;
+            return None;
+        }
+        if let Ok((length, sector, changed)) = super::device::geometry(&self.file, self.kind) {
+            if (512..=65536).contains(&sector)
+                && sector.is_power_of_two()
+                && length % u64::from(sector) == 0
+            {
+                if length == 0 && self.kind != Kind::Cdrom {
+                    self.removed = true;
+                    return None;
+                }
+                if changed {
+                    self.attention = true;
+                }
+                if self.blocks * u64::from(self.block_size) != length || self.block_size != sector {
+                    self.blocks = length / u64::from(sector);
+                    self.block_size = sector;
+                    self.attention = true;
+                    if let Some(track) = self.tracks.first_mut() {
+                        track.blocks = self.blocks;
+                        track.sector_size = sector.try_into().unwrap_or(2048);
+                    }
+                }
+            }
+        }
+        Some(self.blocks * u64::from(self.block_size))
+    }
     fn ready(&mut self) -> std::result::Result<(), [u8; 3]> {
-        if self.ejected {
+        if self.ejected || self.removed || self.blocks == 0 {
             return Err([2, 0x3a, 0]);
         }
         if self.attention {
@@ -398,6 +486,23 @@ impl Image {
         Ok(data)
     }
     fn execute(&mut self, cdb: &[u8], input: &[u8]) -> std::result::Result<Vec<u8>, [u8; 3]> {
+        if self.removed {
+            return Err([2, 0x3a, 0]);
+        }
+        if self.physical.is_some()
+            && self.kind == Kind::Cdrom
+            && super::device::passthrough_supported()
+            && cdb[0] < 0xf0
+        {
+            if self.attention && matches!(cdb[0], 0x00 | 0x08 | 0x25 | 0x28 | 0xa8 | 0xbe | 0xb9) {
+                self.ready()?;
+            }
+            let result = super::device::optical(&self.file, cdb, self.block_size);
+            if result.is_ok() && cdb[0] == 0x1b && cdb[4] & 3 == 2 {
+                self.ejected = true;
+            }
+            return result;
+        }
         let be16 = |i| u16::from_be_bytes([cdb[i], cdb[i + 1]]) as u32;
         let be32 = |i| u32::from_be_bytes(cdb[i..i + 4].try_into().unwrap());
         let read_write = |code: u8| matches!(code, 0x08 | 0x0a | 0x28 | 0x2a | 0xa8 | 0xaa);
@@ -419,12 +524,17 @@ impl Image {
                 if input.len() < length {
                     return Err([5, 0x24, 0]);
                 }
-                self.file
-                    .seek(SeekFrom::Start(position))
-                    .map_err(|_| [3, 0x0c, 2])?;
-                self.file
-                    .write_all(&input[..length])
-                    .map_err(|_| [3, 0x0c, 2])?;
+                if self.physical.is_some() {
+                    super::device::write(&mut self.file, position, &input[..length])
+                        .map_err(|_| [3, 0x0c, 2])?;
+                } else {
+                    self.file
+                        .seek(SeekFrom::Start(position))
+                        .map_err(|_| [3, 0x0c, 2])?;
+                    self.file
+                        .write_all(&input[..length])
+                        .map_err(|_| [3, 0x0c, 2])?;
+                }
                 if cdb[0] != 0x0a && cdb[1] & 8 != 0 {
                     self.file.sync_data().map_err(|_| [3, 0x0c, 2])?;
                 }
@@ -432,6 +542,10 @@ impl Image {
             }
             if self.kind == Kind::Cdrom {
                 return self.read_cd(lba as u64, count);
+            }
+            if self.physical.is_some() {
+                return super::device::read(&mut self.file, position, length)
+                    .map_err(|_| [3, 0x11, 0]);
             }
             let mut data = vec![0; length];
             self.file

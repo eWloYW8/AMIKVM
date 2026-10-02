@@ -1,5 +1,6 @@
 //! Rust owns navigation, forms, presentation models, action routing and input conversion.
 //! The webview renders this declarative tree and forwards browser interaction data.
+mod devices;
 mod view;
 
 use crate::{
@@ -35,6 +36,7 @@ pub enum Dialog {
     Password(Uuid, Option<amikvm_core::video::remote_capture::Kind>),
     Text(Uuid),
     Media(Uuid, amikvm_core::media::scsi::Kind),
+    PhysicalMedia(Uuid, amikvm_core::media::scsi::Kind),
     Folder(Uuid),
     FolderSync(Uuid),
     Macros(Option<Uuid>),
@@ -111,6 +113,7 @@ pub struct UiState {
     pub close_plan: Option<amikvm_core::sharing::exit::Plan>,
     pub log_filter: amikvm_core::diagnostics::Filter,
     pub logs: amikvm_core::diagnostics::Snapshot,
+    pub devices: devices::Inventory,
 }
 
 #[derive(Serialize)]
@@ -387,6 +390,18 @@ pub enum Intent {
         id: Uuid,
         kind: amikvm_core::media::scsi::Kind,
         values: Value,
+    },
+    PhysicalMediaDialog {
+        id: Uuid,
+        kind: amikvm_core::media::scsi::Kind,
+    },
+    PhysicalMediaRefresh,
+    PhysicalMediaStart {
+        id: Uuid,
+        kind: amikvm_core::media::scsi::Kind,
+        values: Value,
+        #[serde(skip)]
+        approved: bool,
     },
     MediaStop {
         id: Uuid,
@@ -940,7 +955,7 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
             ui.dialog = Dialog::Confirmation;
         }
         Intent::ConfirmApply { id } => {
-            let action = {
+            let mut action: Intent = {
                 let mut ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
                 if !matches!(ui.dialog, Dialog::Confirmation)
                     || !ui.confirmation.as_ref().is_some_and(|c| c.id == id)
@@ -951,6 +966,9 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 ui.dialog = confirmation.previous;
                 serde_json::from_value(confirmation.intent).map_err(|e| e.to_string())?
             };
+            if let Intent::PhysicalMediaStart { approved, .. } = &mut action {
+                *approved = true;
+            }
             // The stored action is executed once, then its backend checks run
             // against current permissions, request UUIDs and deadlines.
             return Box::pin(route(app, state, action)).await;
@@ -1625,6 +1643,93 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 .lock()
                 .map_err(|_| "Interface state unavailable")?
                 .dialog = Dialog::Media(id, kind);
+        }
+        Intent::PhysicalMediaDialog { id, kind } => {
+            let generation = Uuid::new_v4();
+            {
+                let mut ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
+                ui.dialog = Dialog::PhysicalMedia(id, kind);
+                ui.devices = devices::Inventory {
+                    generation,
+                    loading: true,
+                    ..Default::default()
+                };
+            }
+            devices::discover(app.clone(), generation);
+        }
+        Intent::PhysicalMediaRefresh => {
+            let mut ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
+            if matches!(ui.dialog, Dialog::PhysicalMedia(..)) {
+                ui.devices.loading = true;
+            }
+        }
+        Intent::PhysicalMediaStart {
+            id,
+            kind,
+            values,
+            approved,
+        } => {
+            let slot: u8 = text(&values, "slot")
+                .parse()
+                .map_err(|_| "请选择可用的介质实例")?;
+            let device = {
+                let ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
+                ui.devices
+                    .entries
+                    .iter()
+                    .find(|device| devices::choice(device) == text(&values, "device"))
+                    .cloned()
+                    .ok_or("实体设备已经移除或身份发生变化，请刷新列表")?
+            };
+            if device.kind != kind {
+                return Err("实体设备类型与所选介质不一致".into());
+            }
+            let readonly =
+                checked(&values, "readonly") || kind == amikvm_core::media::scsi::Kind::Cdrom;
+            if !readonly && !approved {
+                if device.readonly {
+                    return Err("实体设备不支持可写连接".into());
+                }
+                let mut ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
+                let message = crate::locale::scope(language, || {
+                    lformat!(
+                        "允许远程系统直接写入 {}？写入会修改实体设备上的数据，连接期间将独占设备。",
+                        device.path.display()
+                    )
+                });
+                ui.confirmation = Some(Confirmation {
+                    id: Uuid::new_v4(),
+                    message,
+                    intent: json!({"action":"physical_media_start","id":id,"kind":kind,"values":values}),
+                    previous: ui.dialog.clone(),
+                });
+                ui.dialog = Dialog::Confirmation;
+                return Ok(());
+            }
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session
+                .media
+                .start_device(
+                    kind,
+                    slot,
+                    device,
+                    readonly,
+                    checked(&values, "usb"),
+                    checked(&values, "boost"),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let mut ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
+            if matches!(ui.dialog,Dialog::PhysicalMedia(server,media_kind) if server==id&&media_kind==kind)
+            {
+                ui.dialog = Dialog::None;
+            }
         }
         Intent::FolderDialog { id } => {
             state

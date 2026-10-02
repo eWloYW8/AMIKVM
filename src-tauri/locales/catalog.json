@@ -2378,5 +2378,137 @@
   "{} · 重试 {}/{} · {} 秒": [
     "{} · Retry {}/{} · {} s",
     "{} · Tentative {}/{} · {} s"
+  ],
+  "重定向实体 CD/DVD": [
+    "Redirect physical CD/DVD",
+    "Rediriger un lecteur CD/DVD physique"
+  ],
+  "重定向实体硬盘 / USB": [
+    "Redirect physical disk / USB",
+    "Rediriger un disque / USB physique"
+  ],
+  "重定向实体软盘": [
+    "Redirect physical floppy",
+    "Rediriger une disquette physique"
+  ],
+  "选择本机设备，连接为远程服务器的虚拟介质。列表会自动刷新。": [
+    "Select a local device to connect as remote virtual media. The list refreshes automatically.",
+    "Sélectionnez un périphérique local comme média virtuel distant. La liste est actualisée automatiquement."
+  ],
+  "实体设备": [
+    "Physical device",
+    "Périphérique physique"
+  ],
+  "请选择实体设备": [
+    "Select a physical device",
+    "Sélectionnez un périphérique physique"
+  ],
+  "正在读取设备列表": [
+    "Reading device list",
+    "Lecture des périphériques"
+  ],
+  "刷新设备列表": [
+    "Refresh devices",
+    "Actualiser les périphériques"
+  ],
+  "没有找到此类型的实体设备。连接设备后可刷新列表，或改用镜像文件。": [
+    "No devices of this type were found. Connect a device and refresh, or use an image file.",
+    "Aucun périphérique de ce type. Connectez un périphérique et actualisez, ou utilisez une image."
+  ],
+  "访问实体设备需要系统授予相应权限；设备移除后连接会自动结束。": [
+    "Device access requires system permissions. Removing a device ends its connection.",
+    "L’accès exige les autorisations du système. Le retrait termine la connexion."
+  ],
+  "关闭只读后，远程写入将直接修改实体设备。Windows 会尝试锁定卷；Linux 和 macOS 请先卸载本地文件系统。": [
+    "Disabling read-only allows remote writes directly to the device. Windows attempts to lock volumes; unmount local filesystems first on Linux and macOS.",
+    "Désactiver la lecture seule permet les écritures directes. Windows tente de verrouiller les volumes ; démontez les systèmes de fichiers locaux sur Linux et macOS."
+  ],
+  "实体 CD/DVD 以只读方式连接。BMC 决定是否允许加速模式。": [
+    "Physical CD/DVD connects read-only. The BMC decides whether boost mode is available.",
+    "Le lecteur CD/DVD est connecté en lecture seule. Le BMC décide si le mode accéléré est disponible."
+  ],
+  "当前 macOS 支持读取数据光盘；音频光盘和原生光驱控制仍待实现。": [
+    "macOS currently reads data discs; audio discs and native drive controls remain to be implemented.",
+    "macOS lit actuellement les disques de données ; les disques audio et les commandes natives restent à implémenter."
+  ],
+  "连接实体设备": [
+    "Connect physical device",
+    "Connecter le périphérique"
+  ],
+  "改用镜像文件": [
+    "Use image file",
+    "Utiliser une image"
+  ],
+  "选择实体设备": [
+    "Select physical device",
+    "Choisir un périphérique physique"
+  ],
+  "实体设备已移除": [
+    "Physical device removed",
+    "Périphérique physique retiré"
+  ],
+  "实体设备 · 容量 {}": [
+    "Physical device · capacity {}",
+    "Périphérique physique · capacité {}"
+  ],
+  "允许远程系统直接写入 {}？写入会修改实体设备上的数据，连接期间将独占设备。": [
+    "Allow the remote system to write directly to {}? This modifies data on the device and requires exclusive access while connected.",
+    "Autoriser les écritures directes dans {} ? Elles modifient les données du périphérique et exigent un accès exclusif pendant la connexion."
+  ],
+  "实体设备已经移除或身份发生变化，请刷新列表": [
+    "Device removed or identity changed. Refresh the list.",
+    "Périphérique retiré ou identité modifiée. Actualisez la liste."
+  ],
+  "实体设备类型与所选介质不一致": [
+    "Device type does not match the selected media.",
+    "Le type de périphérique ne correspond pas au média sélectionné."
+  ],
+  "实体设备不支持可写连接": [
+    "Device does not support writable access.",
+    "Le périphérique ne permet pas un accès en écriture."
+  ],
+  "请先卸载所选设备上的本地文件系统，再以可写方式连接": [
+    "Unmount local filesystems on this device before connecting with write access.",
+    "Démontez les systèmes de fichiers locaux avant de connecter ce périphérique en écriture."
+  ],
+  "实体设备报告了无效的扇区大小或容量": [
+    "Device reported an invalid sector size or capacity.",
+    "Le périphérique a signalé une taille de secteur ou une capacité invalide."
+  ],
+  "实体设备中没有可用介质": [
+    "Device contains no available media.",
+    "Le périphérique ne contient aucun média disponible."
+  ],
+  "该光盘的扇区格式暂不支持直接读取": [
+    "Direct access does not yet support this disc sector format.",
+    "L’accès direct ne prend pas encore en charge ce format de secteur."
+  ],
+  "所选路径不再是原实体块设备": [
+    "The path no longer identifies the original block device.",
+    "Le chemin ne désigne plus le périphérique de blocs initial."
+  ],
+  "实体设备已被其他连接占用": [
+    "Device is in use by another connection.",
+    "Le périphérique est utilisé par une autre connexion."
+  ],
+  "实体设备身份已改变": [
+    "Device identity changed.",
+    "L’identité du périphérique a changé."
+  ],
+  "无法读取本地设备信息": [
+    "Cannot read local device information.",
+    "Impossible de lire les informations du périphérique local."
+  ],
+  "无法独占锁定实体设备，请关闭使用该设备的程序": [
+    "Cannot lock the device exclusively. Close programs using it.",
+    "Impossible de verrouiller le périphérique. Fermez les programmes qui l’utilisent."
+  ],
+  "镜像入口只接受普通文件，请从实体设备列表选择设备": [
+    "Image selection accepts regular files only. Select devices from the physical device list.",
+    "La sélection d’images accepte seulement les fichiers ordinaires. Choisissez un périphérique dans la liste dédiée."
+  ],
+  "所选设备或其分区已经在其他介质实例中连接": [
+    "This device or one of its partitions is already connected in another media instance.",
+    "Ce périphérique ou une de ses partitions est déjà connecté dans une autre instance de média."
   ]
 }

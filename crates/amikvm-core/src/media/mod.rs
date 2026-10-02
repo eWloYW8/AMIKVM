@@ -1,5 +1,6 @@
 //! IUSB media packets and native block-image SCSI servicing.
 pub mod cache;
+pub mod device;
 pub mod folder;
 mod nrg;
 pub mod redirect;
