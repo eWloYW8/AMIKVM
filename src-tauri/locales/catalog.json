@@ -1147,13 +1147,13 @@
     "DCT quality",
     "Qualité DCT"
   ],
-  "0 · 最低": [
-    "0 · Lowest",
-    "0 · Minimum"
+  "0 · 最佳画质": [
+    "0 · Best quality",
+    "0 · Qualité maximale"
   ],
-  "7 · 最高": [
-    "7 · Highest",
-    "7 · Maximum"
+  "7 · 最低画质": [
+    "7 · Lowest quality",
+    "7 · Qualité minimale"
   ],
   "视频带宽": [
     "Video bandwidth",
@@ -2427,10 +2427,6 @@
     "Physical CD/DVD connects read-only. The BMC decides whether boost mode is available.",
     "Le lecteur CD/DVD est connecté en lecture seule. Le BMC décide si le mode accéléré est disponible."
   ],
-  "当前 macOS 支持读取数据光盘；音频光盘和原生光驱控制仍待实现。": [
-    "macOS currently reads data discs; audio discs and native drive controls remain to be implemented.",
-    "macOS lit actuellement les disques de données ; les disques audio et les commandes natives restent à implémenter."
-  ],
   "连接实体设备": [
     "Connect physical device",
     "Connecter le périphérique"
@@ -2510,5 +2506,21 @@
   "所选设备或其分区已经在其他介质实例中连接": [
     "This device or one of its partitions is already connected in another media instance.",
     "Ce périphérique ou une de ses partitions est déjà connecté dans une autre instance de média."
+  ],
+  "主机显示已解锁（控制已禁用）": [
+    "Host display unlocked (control disabled)",
+    "Écran hôte déverrouillé (contrôle désactivé)"
+  ],
+  "主机显示已锁定（控制已禁用）": [
+    "Host display locked (control disabled)",
+    "Écran hôte verrouillé (contrôle désactivé)"
+  ],
+  "等待主机显示状态": [
+    "Waiting for host display status",
+    "En attente de l’état de l’écran hôte"
+  ],
+  "当前 macOS 支持数据光盘、真实轨道表及光盘信息读取；音频光盘和其他光驱控制仍待补齐。": [
+    "macOS supports data discs, actual disc tables of contents and disc information; audio discs and other drive controls remain to be completed.",
+    "macOS prend en charge les disques de données, leur table des matières et leurs informations ; les disques audio et les autres commandes restent à compléter."
   ]
 }

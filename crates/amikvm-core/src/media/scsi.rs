@@ -491,7 +491,7 @@ impl Image {
         }
         if self.physical.is_some()
             && self.kind == Kind::Cdrom
-            && super::device::passthrough_supported()
+            && super::device::optical_supported(cdb[0])
             && cdb[0] < 0xf0
         {
             if self.attention && matches!(cdb[0], 0x00 | 0x08 | 0x25 | 0x28 | 0xa8 | 0xbe | 0xb9) {

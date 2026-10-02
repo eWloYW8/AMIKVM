@@ -145,6 +145,10 @@ pub fn geometry(file: &File, kind: Kind) -> Result<(u64, u32, bool)> {
 pub fn passthrough_supported() -> bool {
     cfg!(any(target_os = "linux", target_os = "windows"))
 }
+pub fn optical_supported(opcode: u8) -> bool {
+    passthrough_supported()
+        || cfg!(target_os = "macos") && matches!(opcode, 0x43 | 0x51 | 0x52 | 0xbb)
+}
 pub fn read(file: &mut File, offset: u64, bytes: usize) -> std::io::Result<Vec<u8>> {
     #[cfg(target_os = "windows")]
     {

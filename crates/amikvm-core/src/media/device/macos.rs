@@ -1,4 +1,5 @@
 use super::*;
+mod optical;
 use plist::Value;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -300,9 +301,9 @@ pub(super) fn present(file: &File, device: &Device) -> bool {
         && device.identity.ends_with(&node_identity(&current))
 }
 pub(super) fn optical(
-    _file: &File,
-    _cdb: &[u8],
-    _bytes: usize,
+    file: &File,
+    cdb: &[u8],
+    bytes: usize,
 ) -> std::result::Result<Vec<u8>, [u8; 3]> {
-    Err([5, 0x20, 0])
+    optical::execute(file, cdb, bytes)
 }

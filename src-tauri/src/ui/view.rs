@@ -2067,7 +2067,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 fields.push(label(
                     "p",
                     "input-help",
-                    tr("当前 macOS 支持读取数据光盘；音频光盘和原生光驱控制仍待实现。"),
+                    tr("当前 macOS 支持数据光盘、真实轨道表及光盘信息读取；音频光盘和其他光驱控制仍待补齐。"),
                 ));
             }
             let mut footer = actions(if physical {
@@ -2624,18 +2624,24 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                         ),
                         button(
                             "button secondary wide",
-                            if snapshot.and_then(|v| v.host_display) == Some(1) {
-                                tr("解锁主机显示")
-                            } else {
-                                tr("锁定主机显示")
+                            match snapshot.and_then(|v| v.host_display) {
+                                Some(0) => tr("锁定主机显示"),
+                                Some(1) => tr("解锁主机显示"),
+                                Some(2) => tr("主机显示已解锁（控制已禁用）"),
+                                Some(3) => tr("主机显示已锁定（控制已禁用）"),
+                                _ => tr("等待主机显示状态"),
                             },
                             "",
                             control(
                                 json!({"action":"host_display","locked":snapshot.and_then(|v|v.host_display)!=Some(1)}),
                             ),
                             !controllable
-                                || snapshot
-                                    .is_some_and(|s| s.host_display_supported == Some(false)),
+                                || !snapshot.is_some_and(|s| {
+                                    amikvm_core::video::config::host_display_available(
+                                        s.host_display,
+                                        s.host_display_supported,
+                                    )
+                                }),
                         ),
                     ],
                 ),
@@ -3301,7 +3307,7 @@ fn video_options(server: &Server, snapshot: Option<&Snapshot>, zoom: super::Zoom
         ("0", "YUV 420"), ("1", "YUV 444"), ("2", tr("YUV 444 · 2 色 VQ")), ("3", tr("YUV 444 · 4 色 VQ")),
     ], json!({"value":engine.map_or(0, |e| e.compression).to_string(),"disabled":!can_configure,"action":{"action":"video_config","id":server.id,"setting":"compression"}})));
     children.push(select("quality", tr("DCT 画质"), &[
-        ("0", tr("0 · 最低")), ("1", "1"), ("2", "2"), ("3", "3"), ("4", "4"), ("5", "5"), ("6", "6"), ("7", tr("7 · 最高")),
+        ("0", tr("0 · 最佳画质")), ("1", "1"), ("2", "2"), ("3", "3"), ("4", "4"), ("5", "5"), ("6", "6"), ("7", tr("7 · 最低画质")),
     ], json!({"value":engine.map_or(0, |e| e.quality).to_string(),"disabled":!can_configure,"action":{"action":"video_config","id":server.id,"setting":"quality"}})));
     let connected = snapshot.is_some_and(|s| s.video_connected);
     let measuring = snapshot.is_some_and(|s| s.bandwidth_measuring);

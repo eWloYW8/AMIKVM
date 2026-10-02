@@ -53,6 +53,8 @@ pub struct Snapshot {
     pub video_connected: bool,
     pub web_only: bool,
     pub video_config: Option<amikvm_core::video::config::EngineConfig>,
+    #[serde(skip)]
+    video_config_revision: u64,
     pub bandwidth: Option<u32>,
     pub bandwidth_measuring: bool,
     pub measured_bytes_per_second: Option<u64>,
@@ -104,6 +106,7 @@ impl Snapshot {
             video_connected: false,
             web_only: false,
             video_config: None,
+            video_config_revision: 0,
             bandwidth: None,
             bandwidth_measuring: false,
             measured_bytes_per_second: None,
@@ -145,6 +148,14 @@ pub struct Session {
 
 enum Outgoing {
     Bytes(Vec<u8>),
+    VideoConfig {
+        setting: amikvm_core::video::config::Setting,
+        reply: oneshot::Sender<Result<()>>,
+    },
+    HostDisplay {
+        locked: bool,
+        reply: oneshot::Sender<Result<()>>,
+    },
     Mouse(crate::mouse::Operation),
     SharingAnswer(Vec<u8>),
     Handoff {
@@ -345,6 +356,8 @@ impl Session {
                 update(&app, &worker_snapshot, |s| {
                     s.service = Default::default();
                     s.host_display_supported = None;
+                    s.host_display = None;
+                    s.video_config = None;
                     if s.recovery.attempt > 0 {
                         s.recovery.authenticating();
                     }
@@ -420,6 +433,55 @@ impl Session {
                                 },
                                 Some(Outgoing::Bytes(bytes)) => {
                                     if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                                },
+                                Some(Outgoing::VideoConfig { setting, reply }) => {
+                                    let prepared = (|| {
+                                        let snapshot = writer_snapshot.lock().map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                        if !writer_ready.load(Ordering::Acquire) || !snapshot.video_connected {
+                                            return Err(Error::Invalid("Session is not connected".into()));
+                                        }
+                                        if !snapshot.can_control {
+                                            return Err(Error::Authentication("Control permission is required".into()));
+                                        }
+                                        let base = snapshot.video_config.ok_or_else(|| Error::Invalid("Waiting for BMC video configuration".into()))?;
+                                        Ok((base.change(setting, snapshot.host_display)?, snapshot.video_config_revision))
+                                    })();
+                                    let (config, revision) = match prepared {
+                                        Ok(config) => config,
+                                        Err(error) => { let _ = reply.send(Err(error)); continue; }
+                                    };
+                                    let bytes = config.packet().expect("validated AST configuration");
+                                    if let Err(error) = transport::write_packet(&mut writer, &bytes).await {
+                                        let _ = reply.send(Err(Error::Protocol(error.to_string()))); break Err(error);
+                                    }
+                                    update(&writer_app, &writer_snapshot, |s| {
+                                        // A newer BMC 4099 response takes precedence over local prediction.
+                                        if s.can_control && s.video_config_revision == revision { s.video_config = Some(config); }
+                                    });
+                                    let _ = reply.send(Ok(()));
+                                },
+                                Some(Outgoing::HostDisplay { locked, reply }) => {
+                                    let prepared = (|| {
+                                        let snapshot = writer_snapshot.lock().map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                        if !writer_ready.load(Ordering::Acquire) || !snapshot.video_connected {
+                                            return Err(Error::Invalid("Session is not connected".into()));
+                                        }
+                                        if !snapshot.can_control {
+                                            return Err(Error::Authentication("Control permission is required".into()));
+                                        }
+                                        if !amikvm_core::video::config::host_display_available(snapshot.host_display, snapshot.host_display_supported) {
+                                            return Err(Error::Invalid("BMC 已禁用主机显示控制。".into()));
+                                        }
+                                        Control::HostDisplay { locked }.encode()
+                                    })();
+                                    let bytes = match prepared {
+                                        Ok(bytes) => bytes,
+                                        Err(error) => { let _ = reply.send(Err(error)); continue; }
+                                    };
+                                    if let Err(error) = transport::write_packet(&mut writer, &bytes).await {
+                                        let _ = reply.send(Err(Error::Protocol(error.to_string()))); break Err(error);
+                                    }
+                                    let _ = reply.send(Ok(()));
                                 },
                                 Some(Outgoing::SharingAnswer(bytes)) => {
                                     if !writer_snapshot.lock().is_ok_and(|s| s.sharing.can_control()) { continue; }
@@ -739,7 +801,10 @@ impl Session {
                         }
                         4099 if approved => {
                             let config = amikvm_core::video::config::EngineConfig::parse(&body)?;
-                            update(&app, &worker_snapshot, |s| s.video_config = Some(config));
+                            update(&app, &worker_snapshot, |s| {
+                                s.video_config = Some(config);
+                                s.video_config_revision = s.video_config_revision.wrapping_add(1);
+                            });
                         }
                         17 if approved => {
                             let measurement = packet.bandwidth.ok_or_else(|| {
@@ -879,7 +944,7 @@ impl Session {
                         34 if header.status != 100 => {
                             update(&app, &worker_snapshot, |s| s.power = Some(header.status))
                         }
-                        52 => update(&app, &worker_snapshot, |s| {
+                        52 if header.status <= 3 => update(&app, &worker_snapshot, |s| {
                             s.host_display = Some(header.status)
                         }),
                         49 => {
@@ -1140,15 +1205,15 @@ impl Session {
                 "Session has view-only permissions".into(),
             ));
         }
-        if matches!(control, Control::HostDisplay { .. })
-            && self
-                .snapshot
-                .lock()
-                .map_err(|_| Error::Invalid("Session unavailable".into()))?
-                .host_display_supported
-                == Some(false)
-        {
-            return Err(Error::Invalid("BMC 已禁用主机显示控制。".into()));
+        if let Control::HostDisplay { locked } = control {
+            let (reply, result) = oneshot::channel();
+            self.sender
+                .send(Outgoing::HostDisplay { locked, reply })
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            return result
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
         }
         if let Control::InputEncryption { enabled } = control {
             self.input(Event::ReleaseAll).await?;
@@ -1299,30 +1364,14 @@ impl Session {
         if !self.ready.load(Ordering::Acquire) {
             return Err(Error::Invalid("Session is not connected".into()));
         }
-        let config = {
-            let snapshot = self
-                .snapshot
-                .lock()
-                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
-            if !snapshot.can_control {
-                return Err(Error::Authentication(
-                    "Control permission is required".into(),
-                ));
-            }
-            snapshot
-                .video_config
-                .ok_or_else(|| Error::Invalid("Waiting for BMC video configuration".into()))?
-        }
-        .change(setting)?;
+        let (reply, result) = oneshot::channel();
         self.sender
-            .send(Outgoing::Bytes(config.packet()?))
+            .send(Outgoing::VideoConfig { setting, reply })
             .await
             .map_err(|_| Error::Protocol("Connection closed".into()))?;
-        self.snapshot
-            .lock()
-            .map_err(|_| Error::Invalid("Session unavailable".into()))?
-            .video_config = Some(config);
-        Ok(())
+        result
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))?
     }
     pub fn can_record(&self) -> bool {
         self.ready.load(Ordering::Acquire)
