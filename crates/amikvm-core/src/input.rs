@@ -3,6 +3,7 @@ use crate::{Error, Result, protocol};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+pub mod capture;
 pub mod encryption;
 pub mod layout;
 pub mod macros;
@@ -25,6 +26,16 @@ pub enum Event {
         dx: f64,
         dy: f64,
         wheel: f64,
+        #[serde(default)]
+        capture: Option<uuid::Uuid>,
+        #[serde(default)]
+        entered: bool,
+    },
+    PointerCapture {
+        token: uuid::Uuid,
+        locked: bool,
+        #[serde(default)]
+        failed: bool,
     },
     Release,
     SoftKey {
@@ -270,6 +281,7 @@ pub fn mouse(event: &Event, absolute: bool) -> Result<Vec<Vec<u8>>> {
         dx,
         dy,
         wheel,
+        ..
     } = event
     else {
         return Err(Error::Invalid("Expected a pointer event".into()));

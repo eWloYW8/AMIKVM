@@ -2300,7 +2300,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                 vec![
                     node(
                         "video",
-                        json!({"serverId":s.id,"enabled":controllable,"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"style":frame_style}),
+                        json!({"serverId":s.id,"enabled":controllable && matches!(ui.dialog,Dialog::None),"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"captureToken":if matches!(ui.dialog,Dialog::None) && !paused { snapshot.and_then(|v|v.mouse_capture.token) } else {None},"style":frame_style}),
                         vec![],
                     ),
                     group(
@@ -2523,6 +2523,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
         ),
         mouse,
         mouse_calibration(s, snapshot, controllable),
+        mouse_capture(s, snapshot, controllable && !paused),
         button(
             "button secondary wide",
             if ui.hidden_local_cursor.contains(&s.id) {
@@ -2680,6 +2681,44 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
         )
     };
     group("div", "console-layout", vec![main, panel])
+}
+
+fn mouse_capture(server: &Server, snapshot: Option<&Snapshot>, enabled: bool) -> Node {
+    let Some(s) = snapshot.filter(|s| matches!(s.mouse_mode, Some(1 | 3))) else {
+        return group("div", "", vec![]);
+    };
+    let requested = s.mouse_capture.requested();
+    let mut children = vec![
+        button(
+            "button secondary wide",
+            if requested {
+                tr("释放鼠标捕获")
+            } else {
+                tr("开启鼠标捕获")
+            },
+            "Monitor",
+            json!({"action":"mouse_capture","id":server.id,"enabled":!requested}),
+            !requested
+                && (!enabled || !crate::pointer_capture::eligible(s) || s.text_input.active()),
+        ),
+        label(
+            "p",
+            "input-help",
+            if s.mouse_capture.active {
+                tr("鼠标已捕获，移动不受屏幕边缘限制。")
+            } else if requested {
+                tr("点击远端画面开始捕获鼠标。")
+            } else {
+                tr(
+                    "开启后点击画面可持续发送相对移动；Escape 释放，第三种鼠标模式也可用 Alt + C 开关。",
+                )
+            },
+        ),
+    ];
+    if let Some(message) = &s.mouse_capture.message {
+        children.push(label("p", "input-help", translated(message)));
+    }
+    group("div", "keyboard-text-options", children)
 }
 
 fn keyboard_options(server: &Server, snapshot: Option<&Snapshot>, enabled: bool) -> Node {

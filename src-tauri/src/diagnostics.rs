@@ -82,6 +82,15 @@ pub fn session(app: &AppHandle, s: &crate::session::Snapshot) {
         app,
         Category::Input,
         id,
+        "mouse-capture",
+        "鼠标捕获状态已改变",
+        json!({"requested":s.mouse_capture.requested(),"active":s.mouse_capture.active,"message":s.mouse_capture.message}),
+        Level::Info,
+    );
+    changed(
+        app,
+        Category::Input,
+        id,
         "typing",
         "文本输入状态已改变",
         json!({"phase":s.text_input.phase,"total":s.text_input.total,

@@ -38,6 +38,7 @@ pub struct Snapshot {
     pub software_keys: Vec<u8>,
     pub keyboard_options: input::routing::Options,
     pub text_input: input::TextStatus,
+    pub mouse_capture: input::capture::State,
     pub input_encryption: bool,
     pub encryption_required: bool,
     pub host_display: Option<u16>,
@@ -93,6 +94,7 @@ impl Snapshot {
             software_keys: vec![],
             keyboard_options: Default::default(),
             text_input: Default::default(),
+            mouse_capture: Default::default(),
             input_encryption: false,
             encryption_required: false,
             host_display: None,
@@ -406,7 +408,7 @@ impl Session {
                             _ = mouse_clock.tick() => {
                                 let reports = crate::mouse::tick(&writer_app, &writer_snapshot, &writer_video);
                                 if !reports.is_empty() {
-                                    match crate::mouse::write(&mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &reports).await {
+                                    match crate::mouse::write(&writer_app, &mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &reports, None).await {
                                         Ok(written) => { had_input |= written.sent; mouse_length = 4; },
                                         Err(error) => break Err(error),
                                     }
@@ -431,7 +433,7 @@ impl Session {
                                         };
                                         if let Err(error) = transport::write_packet(&mut writer, &release).await { break Err(error); }
                                     }
-                                    let result = crate::mouse::write(&mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &effect.reports).await;
+                                    let result = crate::mouse::write(&writer_app, &mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &effect.reports, effect.pointer).await;
                                     crate::mouse::display(&writer_app, &writer_snapshot, &writer_video);
                                     if effect.notify { crate::mouse::notify(&writer_app, &writer_snapshot); }
                                     match result {
@@ -860,7 +862,9 @@ impl Session {
                             });
                         }
                         10 => update(&app, &worker_snapshot, |s| {
-                            s.mouse_mode = body.first().copied()
+                            let mode = body.first().copied();
+                            if s.mouse_mode != mode { s.mouse_capture.release(); }
+                            s.mouse_mode = mode;
                         }),
                         20 => update(&app, &worker_snapshot, |s| {
                             s.lock_leds = body.first().copied().unwrap_or(0)
@@ -897,7 +901,10 @@ impl Session {
                             if worker_snapshot.lock().is_ok_and(|s| !s.can_control) {
                                 worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                                 worker_keyboard.lock().await.clear();
-                                update(&app, &worker_snapshot, |s| s.software_keys.clear());
+                                update(&app, &worker_snapshot, |s| {
+                                    s.software_keys.clear();
+                                    s.mouse_capture.release();
+                                });
                             }
                             if effect.lost_control {
                                 worker_media.stop_active().await;
@@ -943,6 +950,7 @@ impl Session {
                                         let changed =
                                             snapshot.service.receive_media(&body, &mut config)?;
                                         let media = snapshot.service.media.clone().unwrap();
+                                        if snapshot.mouse_mode != Some(media.mouse_mode) { snapshot.mouse_capture.release(); }
                                         snapshot.mouse_mode = Some(media.mouse_mode);
                                         snapshot.host_display_supported =
                                             Some(media.host_display_control);
@@ -1017,6 +1025,7 @@ impl Session {
                 worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                 update(&app, &worker_snapshot, |s| {
                     s.video_connected = false;
+                    s.mouse_capture.release();
                     s.video_signal = false;
                     if s.phase != "disconnected" {
                         s.phase = if result
@@ -1151,6 +1160,7 @@ impl Session {
                 }
                 s.can_control = false;
                 s.video_connected = false;
+                s.mouse_capture.release();
                 s.video_signal = false;
                 s.sharing.close();
                 s.ipmi.close();
@@ -1570,6 +1580,7 @@ impl Session {
 
     pub async fn stop(&self) {
         self.cancel_text();
+        self.cancel_capture();
         let _ = self.cancel.send(true);
         let mut finished = self.finished.clone();
         while !*finished.borrow_and_update() {
@@ -1639,12 +1650,143 @@ impl Session {
         Ok(())
     }
 
-    pub async fn input(&self, event: Event) -> Result<()> {
+    pub(crate) fn cancel_capture(&self) {
+        let changed = self
+            .snapshot
+            .lock()
+            .is_ok_and(|mut s| s.mouse_capture.release());
+        if changed {
+            crate::mouse::notify(&self.input_app, &self.snapshot);
+        }
+    }
+
+    pub async fn capture_request(&self, enabled: bool) -> Result<()> {
+        if enabled {
+            self.key_input_ready()?;
+            let id = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .server_id;
+            if !crate::pointer_capture::selected(&self.input_app, id) {
+                return Err(Error::Invalid(
+                    "请在有画面的相对鼠标模式下取得控制权限".into(),
+                ));
+            }
+            if !self
+                .snapshot
+                .lock()
+                .is_ok_and(|s| crate::pointer_capture::eligible(&s))
+            {
+                return Err(Error::Invalid(
+                    "请在有画面的相对鼠标模式下取得控制权限".into(),
+                ));
+            }
+        }
+        self.release_input(true).await?;
+        if enabled {
+            self.key_input_ready()?;
+            let id = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .server_id;
+            if !crate::pointer_capture::selected(&self.input_app, id) {
+                return Err(Error::Invalid(
+                    "请在有画面的相对鼠标模式下取得控制权限".into(),
+                ));
+            }
+            let mut s = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            if !crate::pointer_capture::eligible(&s) {
+                return Err(Error::Invalid(
+                    "请在有画面的相对鼠标模式下取得控制权限".into(),
+                ));
+            }
+            s.mouse_capture.request();
+            drop(s);
+            crate::mouse::notify(&self.input_app, &self.snapshot);
+        }
+        Ok(())
+    }
+
+    async fn cursor_shortcut(&self) -> Result<()> {
+        let (id, mode, requested) = self
+            .snapshot
+            .lock()
+            .map(|s| (s.server_id, s.mouse_mode, s.mouse_capture.requested()))
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+        if mode == Some(3) {
+            self.capture_request(!requested).await
+        } else {
+            let state = self.input_app.state::<crate::commands::AppState>();
+            let mut ui = state
+                .ui
+                .lock()
+                .map_err(|_| Error::Invalid("Interface state unavailable".into()))?;
+            if !ui.hidden_local_cursor.remove(&id) {
+                ui.hidden_local_cursor.insert(id);
+            }
+            drop(ui);
+            self.mouse_display();
+            self.input_app.emit("ui-changed", ()).ok();
+            Ok(())
+        }
+    }
+
+    pub async fn input(&self, mut event: Event) -> Result<()> {
+        if let Event::PointerCapture {
+            token,
+            locked,
+            failed,
+        } = &event
+        {
+            let focused = !locked
+                || self
+                    .input_app
+                    .get_webview_window("main")
+                    .is_some_and(|window| window.is_focused().unwrap_or(false));
+            let id = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .server_id;
+            let selected = crate::pointer_capture::selected(&self.input_app, id);
+            let change = {
+                let mut s = self
+                    .snapshot
+                    .lock()
+                    .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                let allowed = focused && selected && crate::pointer_capture::eligible(&s);
+                s.mouse_capture.event(*token, *locked && allowed, *failed)
+            };
+            if change == input::capture::Change::Ignored {
+                return Ok(());
+            }
+            crate::mouse::notify(&self.input_app, &self.snapshot);
+            if change == input::capture::Change::Locked {
+                return Ok(());
+            }
+            event = Event::ReleaseAll;
+        }
+        if matches!(&event, Event::Key { code, pressed: true } if code == "Escape")
+            && self
+                .snapshot
+                .lock()
+                .is_ok_and(|s| s.mouse_capture.requested())
+        {
+            event = Event::ReleaseAll;
+        }
         if matches!(
             event,
             Event::Release | Event::ReleaseAll | Event::SoftKey { pressed: false, .. }
         ) {
             self.cancel_text();
+        }
+        if matches!(event, Event::Release | Event::ReleaseAll) {
+            self.cancel_capture();
         }
         if matches!(event, Event::Pointer { buttons, .. } if buttons != 0) {
             self.cancel_text();
@@ -1671,6 +1813,9 @@ impl Session {
             };
             if let Some(action) = local {
                 use input::routing::Action;
+                if action == Action::Cursor {
+                    return self.cursor_shortcut().await;
+                }
                 if action == Action::Calibrate {
                     return self.mouse_command(input::mouse::Command::Start, None).await;
                 }
@@ -1788,35 +1933,8 @@ impl Session {
                 });
             }
             Event::Release | Event::ReleaseAll => {
-                if matches!(event, Event::ReleaseAll) {
-                    update(&self.input_app, &self.snapshot, |s| s.mouse.suspend());
-                }
-                let mut keyboard = self.keyboard.lock().await;
-                let report = if matches!(event, Event::ReleaseAll) {
-                    keyboard.clear();
-                    update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
-                    [0; 8]
-                } else {
-                    keyboard.release_physical()
-                };
-                if self.input_ready().is_err() {
-                    return Ok(());
-                }
-                self.send_keyboard(&mut keyboard, report).await?;
-                let mode = self
-                    .snapshot
-                    .lock()
-                    .map_err(|_| Error::Invalid("Session unavailable".into()))?
-                    .mouse_mode;
-                self.hid(
-                    true,
-                    if mode.unwrap_or(2) == 2 {
-                        &[0; 6]
-                    } else {
-                        &[0; 4]
-                    },
-                )
-                .await?;
+                self.release_input(matches!(event, Event::ReleaseAll))
+                    .await?
             }
             Event::Pointer { .. } => {
                 self.input_ready()?;
@@ -1825,8 +1943,45 @@ impl Session {
                     .await
                     .map_err(|_| Error::Protocol("Connection closed".into()))?;
             }
+            Event::PointerCapture { .. } => {
+                unreachable!("capture callback handled before input routing")
+            }
         }
         Ok(())
+    }
+
+    async fn release_input(&self, all: bool) -> Result<()> {
+        self.cancel_text();
+        self.cancel_capture();
+        if all {
+            update(&self.input_app, &self.snapshot, |s| s.mouse.suspend());
+        }
+        let mut keyboard = self.keyboard.lock().await;
+        let report = if all {
+            keyboard.clear();
+            update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
+            [0; 8]
+        } else {
+            keyboard.release_physical()
+        };
+        if self.input_ready().is_err() {
+            return Ok(());
+        }
+        self.send_keyboard(&mut keyboard, report).await?;
+        let mode = self
+            .snapshot
+            .lock()
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?
+            .mouse_mode;
+        self.hid(
+            true,
+            if mode.unwrap_or(2) == 2 {
+                &[0; 6]
+            } else {
+                &[0; 4]
+            },
+        )
+        .await
     }
 
     pub async fn mouse_command(

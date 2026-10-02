@@ -23,6 +23,7 @@ tempfile = "3.27"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+webkit2gtk = "2"
 x11-dl = "2.21"
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]

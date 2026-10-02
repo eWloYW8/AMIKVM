@@ -212,6 +212,10 @@ pub enum Intent {
     LocalCursor {
         id: Uuid,
     },
+    MouseCapture {
+        id: Uuid,
+        enabled: bool,
+    },
     Mouse {
         id: Uuid,
         command: amikvm_core::input::mouse::Command,
@@ -627,6 +631,7 @@ pub async fn ui_action(
             .map_err(|_| "Interface state unavailable")?
             .error = Some(message);
     }
+    crate::pointer_capture::release_inactive(&app).await;
     ui_snapshot(state).await
 }
 
@@ -643,6 +648,7 @@ pub async fn ui_input(
                 | amikvm_core::input::Event::ReleaseAll
                 | amikvm_core::input::Event::Key { pressed: false, .. }
                 | amikvm_core::input::Event::SoftKey { pressed: false, .. }
+                | amikvm_core::input::Event::PointerCapture { locked: false, .. }
         )
     {
         return Err("正在处理关闭选择，输入暂时停止。".into());
@@ -655,6 +661,7 @@ pub async fn ui_input(
                 | amikvm_core::input::Event::ReleaseAll
                 | amikvm_core::input::Event::Key { pressed: false, .. }
                 | amikvm_core::input::Event::SoftKey { pressed: false, .. }
+                | amikvm_core::input::Event::PointerCapture { locked: false, .. }
         ) {
             return Ok(());
         }
@@ -1220,6 +1227,22 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 }
             }
             commands::send_control(state.clone(), id, control).await?;
+        }
+        Intent::MouseCapture { id, enabled } => {
+            if enabled && state.shutdown.blocks_connection(id) {
+                return Err("正在处理关闭选择，输入暂时停止。".into());
+            }
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session
+                .capture_request(enabled)
+                .await
+                .map_err(|e| e.to_string())?;
         }
         Intent::LocalCursor { id } => {
             state

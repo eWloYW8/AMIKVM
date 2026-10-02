@@ -11,6 +11,7 @@ mod locale;
 mod media;
 mod mouse;
 mod playback;
+mod pointer_capture;
 mod recording;
 mod recordings;
 mod session;
@@ -30,6 +31,7 @@ fn main() {
             let path = app.path().app_config_dir()?.join("servers.json");
             app.manage(AppState::new(path)?);
             keyboard::install(app.handle())?;
+            pointer_capture::install(app.handle())?;
             diagnostics::record(
                 app.handle(),
                 amikvm_core::diagnostics::Level::Info,
@@ -67,6 +69,7 @@ fn main() {
                     if let Ok(sessions) = state.sessions.try_lock() {
                         for session in sessions.values() {
                             session.cancel_text();
+                            session.cancel_capture();
                         }
                     }
                 }

@@ -31,6 +31,7 @@ pub enum Action {
     Log,
     Paste,
     Calibrate,
+    Cursor,
 }
 pub fn local(
     code: &str,
@@ -44,6 +45,7 @@ pub fn local(
     match code {
         "KeyV" if ctrl && options.easy_paste => Some(Action::Paste),
         "KeyL" if ctrl && shift => Some(Action::Log),
+        "KeyC" if alt && (!options.full_keyboard || mouse_mode == Some(3)) => Some(Action::Cursor),
         "F1" if ctrl && !options.full_keyboard => Some(Action::About),
         "KeyT" if alt && !options.full_keyboard && mouse_mode == Some(1) => Some(Action::Calibrate),
         _ => None,

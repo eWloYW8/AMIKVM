@@ -50,6 +50,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "uuid",
+ "webkit2gtk",
  "x11-dl",
 ]
 

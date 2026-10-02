@@ -2606,5 +2606,37 @@
   "文本输入状态已改变": [
     "Text input state changed",
     "État de la saisie du texte modifié"
+  ],
+  "释放鼠标捕获": [
+    "Release mouse capture",
+    "Libérer la capture de la souris"
+  ],
+  "开启鼠标捕获": [
+    "Enable mouse capture",
+    "Activer la capture de la souris"
+  ],
+  "鼠标已捕获，移动不受屏幕边缘限制。": [
+    "Mouse captured; movement is not limited by screen edges.",
+    "Souris capturée ; le mouvement n’est pas limité par les bords de l’écran."
+  ],
+  "点击远端画面开始捕获鼠标。": [
+    "Click the remote display to capture the mouse.",
+    "Cliquez sur l’écran distant pour capturer la souris."
+  ],
+  "开启后点击画面可持续发送相对移动；Escape 释放，第三种鼠标模式也可用 Alt + C 开关。": [
+    "Enable and click the display for continuous relative movement. Escape releases capture; Alt + C also toggles it in mouse mode 3.",
+    "Activez puis cliquez sur l’écran pour envoyer des mouvements relatifs continus. Échap libère la capture ; Alt + C la bascule aussi en mode souris 3."
+  ],
+  "系统 WebView 未能捕获鼠标，请重新开启后点击画面。": [
+    "The system WebView could not capture the mouse. Enable capture again and click the display.",
+    "La WebView système n’a pas pu capturer la souris. Réactivez la capture puis cliquez sur l’écran."
+  ],
+  "鼠标捕获已释放。": [
+    "Mouse capture released.",
+    "Capture de la souris libérée."
+  ],
+  "鼠标捕获状态已改变": [
+    "Mouse capture state changed",
+    "État de capture de la souris modifié"
   ]
 }
