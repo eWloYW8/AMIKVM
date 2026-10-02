@@ -2638,5 +2638,65 @@
   "鼠标捕获状态已改变": [
     "Mouse capture state changed",
     "État de capture de la souris modifié"
+  ],
+  "锁定键同步：聚焦远程画面后启用": [
+    "Lock synchronization: focus the remote display to enable",
+    "Synchronisation des verrous : activez la vue distante"
+  ],
+  "锁定键同步：等待 BMC 状态": [
+    "Lock synchronization: waiting for BMC state",
+    "Synchronisation des verrous : attente de l’état du BMC"
+  ],
+  "锁定键同步：等待状态确认": [
+    "Lock synchronization: waiting for confirmation",
+    "Synchronisation des verrous : attente de confirmation"
+  ],
+  "锁定键同步：远端跟随本机": [
+    "Lock synchronization: remote follows local",
+    "Synchronisation des verrous : le serveur suit cet ordinateur"
+  ],
+  "锁定键同步：本机跟随远端": [
+    "Lock synchronization: local follows remote",
+    "Synchronisation des verrous : cet ordinateur suit le serveur"
+  ],
+  "系统不支持修改本机锁定键，请使用软键盘": [
+    "The system cannot change local locks; use the software keyboard",
+    "Le système ne peut pas modifier les verrous locaux ; utilisez le clavier virtuel"
+  ],
+  "锁定键同步失败": [
+    "Lock synchronization failed",
+    "Échec de la synchronisation des verrous"
+  ],
+  "系统仅支持部分锁定键状态同步": [
+    "The system supports only some lock keys",
+    "Le système ne prend en charge que certains verrous"
+  ],
+  "无法读取本机锁定键状态": [
+    "Cannot read local lock state",
+    "Impossible de lire l’état des verrous locaux"
+  ],
+  "无法修改本机锁定键状态": [
+    "Cannot change local lock state",
+    "Impossible de modifier l’état des verrous locaux"
+  ],
+  "无法恢复本机锁定键状态": [
+    "Cannot restore local lock state",
+    "Impossible de restaurer l’état des verrous locaux"
+  ],
+  "无法安装本机锁定键消息过滤器": [
+    "Cannot install the local lock message filter",
+    "Impossible d’installer le filtre des messages des verrous locaux"
+  ],
+  "本机锁定键状态未确认，同步已停止": [
+    "Local lock state was not confirmed; synchronization stopped",
+    "État des verrous locaux non confirmé ; synchronisation arrêtée"
+  ],
+  "远端锁定键状态未确认，同步已停止": [
+    "Remote lock state was not confirmed; synchronization stopped",
+    "État des verrous distants non confirmé ; synchronisation arrêtée"
+  ],
+  "Wayland 不提供修改本机锁定键状态的公共接口": [
+    "Wayland has no public interface for changing local lock state",
+    "Wayland ne fournit pas d’interface publique pour modifier les verrous locaux"
   ]
 }

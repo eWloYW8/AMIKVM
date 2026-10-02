@@ -65,6 +65,7 @@ fn main() {
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Focused(false)) {
                 let app = window.app_handle().clone();
+                keyboard::locks::cancel(&app, None);
                 if let Some(state) = app.try_state::<AppState>() {
                     if let Ok(sessions) = state.sessions.try_lock() {
                         for session in sessions.values() {
@@ -83,6 +84,9 @@ fn main() {
                     }
                 });
             }
+            if matches!(event, tauri::WindowEvent::Focused(true)) {
+                keyboard::locks::request(window.app_handle());
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle();
                 if !app
@@ -92,6 +96,8 @@ fn main() {
                 {
                     api.prevent_close();
                     shutdown::request(app, amikvm_core::sharing::exit::Scope::Application);
+                } else {
+                    keyboard::locks::shutdown(app);
                 }
             }
         })
@@ -106,6 +112,8 @@ fn main() {
                 {
                     api.prevent_exit();
                     shutdown::request(app, amikvm_core::sharing::exit::Scope::Application);
+                } else {
+                    keyboard::locks::shutdown(app);
                 }
             }
         });

@@ -13,6 +13,9 @@ pub mod routing;
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
+    Focus {
+        focused: bool,
+    },
     Key {
         code: String,
         pressed: bool,

@@ -2537,6 +2537,37 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
         ),
         keyboard,
     ];
+    {
+        use crate::keyboard::locks::Phase;
+        let locks = &ui.host_locks;
+        let active = locks.server == Some(s.id);
+        let message = match if active { locks.phase } else { Phase::Inactive } {
+            Phase::Inactive => tr("锁定键同步：聚焦远程画面后启用"),
+            Phase::Waiting => tr("锁定键同步：等待 BMC 状态"),
+            Phase::Pending => tr("锁定键同步：等待状态确认"),
+            Phase::Synchronized if locks.reverse => tr("锁定键同步：远端跟随本机"),
+            Phase::Synchronized => tr("锁定键同步：本机跟随远端"),
+            Phase::Unavailable => tr("系统不支持修改本机锁定键，请使用软键盘"),
+            Phase::Failed => tr("锁定键同步失败"),
+        };
+        keyboard_children.push(label("small", "keyboard-lock-sync", message));
+        if active && locks.mask != 0 && locks.mask != 7 {
+            keyboard_children.push(label(
+                "small",
+                "keyboard-lock-partial",
+                tr("系统仅支持部分锁定键状态同步"),
+            ));
+        }
+        if let Some(error) = &locks.error {
+            if active || locks.phase == Phase::Failed {
+                keyboard_children.push(label(
+                    "small",
+                    "keyboard-lock-error",
+                    &crate::locale::message(error),
+                ));
+            }
+        }
+    }
     if config.is_none_or(|c| c.keyboard_layout == "AD") {
         keyboard_children.push(label(
             "small",

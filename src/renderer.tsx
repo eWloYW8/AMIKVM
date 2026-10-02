@@ -80,6 +80,19 @@ function Video({ props: p }: { props: Props }) {
   current.current = p;
   const captureRequest = useRef<string | null>(null);
   useEffect(() => {
+    const focus = () => sendInput({ id: String(p.serverId), event: { type: 'focus', focused: !document.hidden && document.activeElement === canvas.current } });
+    window.addEventListener('focus', focus);
+    window.addEventListener('blur', focus);
+    document.addEventListener('visibilitychange', focus);
+    focus();
+    return () => {
+      window.removeEventListener('focus', focus);
+      window.removeEventListener('blur', focus);
+      document.removeEventListener('visibilitychange', focus);
+      sendInput({ id: String(p.serverId), event: { type: 'focus', focused: false } });
+    };
+  }, [p.serverId, sendInput]);
+  useEffect(() => {
     function result(locked: boolean, failed = false) {
       const token = captureRequest.current;
       if (token) sendInput({ id: String(p.serverId), event: { type: 'pointer_capture', token, locked, failed } });
@@ -152,7 +165,7 @@ function Video({ props: p }: { props: Props }) {
     }
     pointer(e);
   }
-  return <canvas ref={canvas} style={{ ...(p.style as CSSProperties), visibility: p.visible ? 'visible' : 'hidden' }} tabIndex={p.enabled ? 0 : -1} data-server={String(p.serverId)} onContextMenu={e => e.preventDefault()} onKeyDown={e => { if (p.enabled) { e.preventDefault(); if (!e.repeat) send({ type: 'key', code: e.code, pressed: true }); } }} onKeyUp={e => { e.preventDefault(); send({ type: 'key', code: e.code, pressed: false }); }} onBlur={() => send({ type: 'release' })} onPointerDown={e => { e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId); }} onMouseDown={down} onMouseUp={e => pointer(e)} onMouseMove={e => pointer(e)} onMouseEnter={e => pointer(e, true)} onWheel={e => { e.preventDefault(); const bounds = e.currentTarget.getBoundingClientRect(); send({ type: 'pointer', buttons: e.buttons, x: e.clientX - bounds.left, y: e.clientY - bounds.top, width: Math.round(bounds.width), height: Math.round(bounds.height), dx: 0, dy: 0, wheel: e.deltaY, capture: document.pointerLockElement === e.currentTarget ? captureRequest.current : null }); }} />;
+  return <canvas ref={canvas} style={{ ...(p.style as CSSProperties), visibility: p.visible ? 'visible' : 'hidden' }} tabIndex={p.enabled ? 0 : -1} data-server={String(p.serverId)} onContextMenu={e => e.preventDefault()} onKeyDown={e => { if (p.enabled) { e.preventDefault(); if (!e.repeat) send({ type: 'key', code: e.code, pressed: true }); } }} onKeyUp={e => { e.preventDefault(); send({ type: 'key', code: e.code, pressed: false }); }} onFocus={() => sendInput({ id: String(p.serverId), event: { type: 'focus', focused: true } })} onBlur={() => sendInput({ id: String(p.serverId), event: { type: 'focus', focused: false } })} onPointerDown={e => { e.currentTarget.focus(); e.currentTarget.setPointerCapture(e.pointerId); }} onMouseDown={down} onMouseUp={e => pointer(e)} onMouseMove={e => pointer(e)} onMouseEnter={e => pointer(e, true)} onWheel={e => { e.preventDefault(); const bounds = e.currentTarget.getBoundingClientRect(); send({ type: 'pointer', buttons: e.buttons, x: e.clientX - bounds.left, y: e.clientY - bounds.top, width: Math.round(bounds.width), height: Math.round(bounds.height), dx: 0, dy: 0, wheel: e.deltaY, capture: document.pointerLockElement === e.currentTarget ? captureRequest.current : null }); }} />;
 }
 
 function Render({ node }: { node: UiNode }) {

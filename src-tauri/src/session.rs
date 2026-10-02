@@ -35,6 +35,8 @@ pub struct Snapshot {
     pub mouse_mode: Option<u8>,
     pub mouse: input::mouse::State,
     pub lock_leds: u8,
+    pub lock_leds_known: bool,
+    pub input_focused: bool,
     pub software_keys: Vec<u8>,
     pub keyboard_options: input::routing::Options,
     pub text_input: input::TextStatus,
@@ -91,6 +93,8 @@ impl Snapshot {
             mouse_mode: None,
             mouse: input::mouse::State::default(),
             lock_leds: 0,
+            lock_leds_known: false,
+            input_focused: false,
             software_keys: vec![],
             keyboard_options: Default::default(),
             text_input: Default::default(),
@@ -177,6 +181,7 @@ enum Outgoing {
         report: Vec<u8>,
         reply: Option<oneshot::Sender<Result<()>>>,
         text_generation: Option<u64>,
+        locks_token: Option<Uuid>,
     },
     Encryption {
         enabled: bool,
@@ -534,13 +539,21 @@ impl Session {
                                     }
                                     if let Some(reply) = reply { let _ = reply.send(Ok(())); }
                                 },
-                                Some(Outgoing::Hid { mouse, report, reply, text_generation }) => {
+                                Some(Outgoing::Hid { mouse, report, reply, text_generation, locks_token }) => {
+                                    // Window getters marshal to the UI thread. Never retain
+                                    // the snapshot mutex while waiting for that thread.
+                                    let locks_allowed = locks_token.is_none_or(|token| {
+                                        let focused = writer_app.get_webview_window("main").is_some_and(|w| w.is_focused().unwrap_or(false));
+                                        let owner = writer_snapshot.lock().ok().map(|s| (s.server_id, s.input_focused && s.video_signal && s.video_connected));
+                                        focused && owner.is_some_and(|(id, allowed)| allowed && crate::keyboard::locks::owns(&writer_app, id, token))
+                                    });
                                     // A report queued before a BMC permission change must not
                                     // reach the host after another session acquires control.
                                     if !writer_ready.load(Ordering::Acquire)
                                         || !writer_snapshot.lock().is_ok_and(|s| s.can_control)
                                         || text_generation.is_some_and(|value| value != *writer_text_generation.borrow())
                                         || reply.as_ref().is_some_and(|reply| reply.is_closed())
+                                        || !locks_allowed
                                         || (!mouse && report.iter().any(|v| *v != 0)
                                             && writer_snapshot.lock().is_ok_and(|s| s.mouse.active())) {
                                         if let Some(reply) = reply { let _ = reply.send(Err(Error::Invalid("文本输入已停止".into()))); }
@@ -866,9 +879,15 @@ impl Session {
                             if s.mouse_mode != mode { s.mouse_capture.release(); }
                             s.mouse_mode = mode;
                         }),
-                        20 => update(&app, &worker_snapshot, |s| {
-                            s.lock_leds = body.first().copied().unwrap_or(0)
-                        }),
+                        20 => {
+                            if let Some(bits) = body.first() {
+                                update(&app, &worker_snapshot, |s| {
+                                    s.lock_leds = bits & 7;
+                                    s.lock_leds_known = true;
+                                });
+                                crate::keyboard::locks::request(&app);
+                            }
+                        },
                         14 | 15 => {
                             worker_sender
                                 .send(Outgoing::Encryption {
@@ -1025,6 +1044,8 @@ impl Session {
                 worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                 update(&app, &worker_snapshot, |s| {
                     s.video_connected = false;
+                    s.lock_leds_known = false;
+                    s.input_focused = false;
                     s.mouse_capture.release();
                     s.video_signal = false;
                     if s.phase != "disconnected" {
@@ -1071,6 +1092,8 @@ impl Session {
                 update(&app, &worker_snapshot, |s| {
                     s.can_control = false;
                     s.video_connected = false;
+                    s.lock_leds_known = false;
+                    s.input_focused = false;
                     s.video_signal = false;
                     s.software_keys.clear();
                     s.input_encryption = false;
@@ -1160,6 +1183,8 @@ impl Session {
                 }
                 s.can_control = false;
                 s.video_connected = false;
+                s.lock_leds_known = false;
+                s.input_focused = false;
                 s.mouse_capture.release();
                 s.video_signal = false;
                 s.sharing.close();
@@ -1573,12 +1598,14 @@ impl Session {
                 report: report.to_vec(),
                 reply: None,
                 text_generation: None,
+                locks_token: None,
             })
             .await
             .map_err(|_| Error::Protocol("Connection closed".into()))
     }
 
     pub async fn stop(&self) {
+        self.focus(false);
         self.cancel_text();
         self.cancel_capture();
         let _ = self.cancel.send(true);
@@ -1737,6 +1764,26 @@ impl Session {
     }
 
     pub async fn input(&self, mut event: Event) -> Result<()> {
+        if let Event::Focus { focused } = event {
+            self.focus(focused);
+            if !focused {
+                self.release_input(false).await?;
+            }
+            return Ok(());
+        }
+        if matches!(
+            &event,
+            Event::Key { pressed: true, .. } | Event::Pointer { buttons: 1.., .. }
+        ) {
+            self.focus(true);
+        }
+        if let Event::Key { code, .. } = &event {
+            if let Ok(snapshot) = self.snapshot.lock() {
+                let id = snapshot.server_id;
+                drop(snapshot);
+                crate::keyboard::locks::physical_key(&self.input_app, id, code);
+            }
+        }
         if let Event::PointerCapture {
             token,
             locked,
@@ -1946,8 +1993,94 @@ impl Session {
             Event::PointerCapture { .. } => {
                 unreachable!("capture callback handled before input routing")
             }
+            Event::Focus { .. } => unreachable!("focus handled before input routing"),
         }
         Ok(())
+    }
+
+    pub fn focus(&self, focused: bool) {
+        let id = match self.snapshot.lock() {
+            Ok(s) => s.server_id,
+            Err(_) => return,
+        };
+        // DOM focus persists across native window blur. Native ownership is
+        // checked separately by the policy and writer, including refocus.
+        let focused = focused && crate::pointer_capture::selected(&self.input_app, id);
+        let mut changed = false;
+        if let Ok(mut snapshot) = self.snapshot.lock() {
+            let focused = focused && snapshot.video_connected && snapshot.can_control;
+            if snapshot.input_focused != focused {
+                snapshot.input_focused = focused;
+                changed = true;
+            }
+        }
+        if !focused {
+            crate::keyboard::locks::cancel(&self.input_app, Some(id));
+        } else if changed {
+            crate::keyboard::locks::request(&self.input_app);
+        }
+    }
+
+    /// No modifiers or user-held keys may accompany an automatic lock toggle.
+    /// The writer checks ownership again at dispatch; key-up always follows a
+    /// successful key-down even if focus is lost during the 35 ms interval.
+    pub async fn sync_locks(&self, token: Uuid, desired: u8, mask: u8) -> Result<bool> {
+        let keyboard = self.keyboard.lock().await;
+        if keyboard.report() != [0; 8] || self.key_input_ready().is_err() {
+            return Ok(false);
+        }
+        let id = self
+            .snapshot
+            .lock()
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?
+            .server_id;
+        for (bit, usage) in [(1, 0x53), (2, 0x39), (4, 0x47)] {
+            if !crate::keyboard::locks::owns(&self.input_app, id, token) {
+                return Ok(false);
+            }
+            self.key_input_ready()?;
+            let leds = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .lock_leds;
+            if (leds ^ desired) & mask & bit == 0 {
+                continue;
+            }
+            let mut report = [0; 8];
+            report[2] = usage;
+            if let Err(error) = self.lock_report(report, Some(token)).await {
+                let _ = self.hid(false, &[0; 8]).await;
+                return Err(error);
+            }
+            tokio::time::sleep(Duration::from_millis(35)).await;
+            // Do not invalidate this release when a newer job supersedes us.
+            if let Err(error) = self.lock_report([0; 8], None).await {
+                let _ = self.hid(false, &[0; 8]).await;
+                return Err(error);
+            }
+        }
+        Ok(true)
+    }
+    async fn lock_report(&self, report: [u8; 8], token: Option<Uuid>) -> Result<()> {
+        let (reply, written) = oneshot::channel();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            self.sender
+                .send(Outgoing::Hid {
+                    mouse: false,
+                    report: report.to_vec(),
+                    reply: Some(reply),
+                    text_generation: None,
+                    locks_token: token,
+                })
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            written
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?
+        })
+        .await
+        .map_err(|_| Error::Timeout("Keyboard lock synchronization"))?
     }
 
     async fn release_input(&self, all: bool) -> Result<()> {

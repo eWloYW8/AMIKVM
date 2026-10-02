@@ -2,6 +2,7 @@
 use amikvm_core::input::layout::{self, Layout};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
+pub mod locks;
 
 #[derive(Default, Clone, PartialEq)]
 pub struct Snapshot {
@@ -12,6 +13,7 @@ pub struct Snapshot {
 #[derive(Default)]
 pub struct Host {
     pub snapshot: Mutex<Snapshot>,
+    pub locks: Mutex<locks::State>,
     #[cfg(target_os = "linux")]
     pub group: Mutex<Option<u8>>,
 }
@@ -28,6 +30,7 @@ fn refresh(app: &AppHandle) {
 }
 
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
+    locks::install(app);
     #[cfg(target_os = "linux")]
     {
         use gtk::prelude::*;

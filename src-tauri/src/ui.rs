@@ -103,6 +103,7 @@ pub struct UiState {
     pub soft_keyboard: HashSet<Uuid>,
     pub soft_layout: HashMap<Uuid, amikvm_core::input::layout::Layout>,
     pub host_keyboard: crate::keyboard::Snapshot,
+    pub host_locks: crate::keyboard::locks::Status,
     pub playback_selected: bool,
     pub playback: Option<crate::playback::Snapshot>,
     pub recordings: HashMap<Uuid, crate::recordings::Snapshot>,
@@ -605,6 +606,13 @@ pub async fn ui_snapshot(state: State<'_, AppState>) -> Response<Model> {
         .lock()
         .map_err(|_| "本机键盘状态不可用")?
         .clone();
+    ui.host_locks = state
+        .host_keyboard
+        .locks
+        .lock()
+        .map_err(|_| "本机键盘状态不可用")?
+        .status
+        .clone();
     ui.logs = state.diagnostics.snapshot(&ui.log_filter);
     Ok(Model {
         root: crate::locale::scope(ui.language, || view::build(&ui, &servers, &sessions)),
@@ -645,6 +653,7 @@ pub async fn ui_input(
         && !matches!(
             event,
             amikvm_core::input::Event::Release
+                | amikvm_core::input::Event::Focus { focused: false }
                 | amikvm_core::input::Event::ReleaseAll
                 | amikvm_core::input::Event::Key { pressed: false, .. }
                 | amikvm_core::input::Event::SoftKey { pressed: false, .. }
@@ -658,6 +667,7 @@ pub async fn ui_input(
         if matches!(
             event,
             amikvm_core::input::Event::Release
+                | amikvm_core::input::Event::Focus { focused: false }
                 | amikvm_core::input::Event::ReleaseAll
                 | amikvm_core::input::Event::Key { pressed: false, .. }
                 | amikvm_core::input::Event::SoftKey { pressed: false, .. }

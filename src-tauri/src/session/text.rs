@@ -123,7 +123,7 @@ impl Session {
                     _ = changed.changed() => return Err(Error::Invalid("文本输入已停止".into())),
                     result = async {
                         self.sender.send(Outgoing::Hid {
-                            mouse: false, report: report.to_vec(), reply: Some(reply), text_generation: Some(generation),
+                            mouse: false, report: report.to_vec(), reply: Some(reply), text_generation: Some(generation), locks_token: None,
                         }).await.map_err(|_| Error::Protocol("Connection closed".into()))?;
                         written.await.map_err(|_| Error::Protocol("Connection closed".into()))?
                     } => result?,
