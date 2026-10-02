@@ -391,7 +391,12 @@ impl Decoder {
                 } else {
                     values
                 };
-                self.yuv[index] = values;
+                // AST pass 2 refines the last pass-1/VQ samples. Its result
+                // changes the presented pixels, never that reference: the
+                // next refinement is again relative to the same base.
+                if !differential {
+                    self.yuv[index] = values;
+                }
                 let yy = fixed(1.164, values[0] as i32 - 16);
                 let b = (yy + fixed(2.015625, values[1] as i32 - 128)).clamp(0, 255) as u8;
                 let g = (yy
