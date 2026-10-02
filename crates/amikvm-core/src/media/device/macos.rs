@@ -274,7 +274,11 @@ pub(super) fn open(device: &Device, readonly: bool) -> Result<(File, Vec<File>)>
     }
     Ok((file, vec![]))
 }
-pub(super) fn geometry(file: &File, _kind: Kind) -> Result<(u64, u32, bool)> {
+pub(super) fn geometry(file: &File, kind: Kind) -> Result<(u64, u32, bool)> {
+    if kind == Kind::Cdrom {
+        let (length, sector) = optical::geometry(file)?;
+        return Ok((length, sector, false));
+    }
     let mut sector = 0u32;
     let mut count = 0u64;
     // Darwin disk.h DKIOCGETBLOCKSIZE and DKIOCGETBLOCKCOUNT use fixed-width

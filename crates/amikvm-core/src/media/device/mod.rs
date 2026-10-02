@@ -147,7 +147,23 @@ pub fn passthrough_supported() -> bool {
 }
 pub fn optical_supported(opcode: u8) -> bool {
     passthrough_supported()
-        || cfg!(target_os = "macos") && matches!(opcode, 0x43 | 0x51 | 0x52 | 0xbb)
+        || cfg!(target_os = "macos")
+            && matches!(
+                opcode,
+                0x00 | 0x08
+                    | 0x25
+                    | 0x28
+                    | 0x42
+                    | 0x43
+                    | 0x51
+                    | 0x52
+                    | 0xa4
+                    | 0xa8
+                    | 0xad
+                    | 0xb9
+                    | 0xbb
+                    | 0xbe
+            )
 }
 pub fn read(file: &mut File, offset: u64, bytes: usize) -> std::io::Result<Vec<u8>> {
     #[cfg(target_os = "windows")]
