@@ -378,6 +378,17 @@ pub enum Intent {
     TextDialog {
         id: Uuid,
     },
+    KeyboardOption {
+        id: Uuid,
+        #[serde(flatten)]
+        setting: amikvm_core::input::routing::Setting,
+    },
+    Paste {
+        id: Uuid,
+    },
+    TextStop {
+        id: Uuid,
+    },
     Text {
         id: Uuid,
         values: Value,
@@ -2289,7 +2300,46 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 .map_err(|_| "Interface state unavailable")?
                 .dialog = Dialog::Text(id);
         }
+        Intent::KeyboardOption { id, setting } => {
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session
+                .keyboard_option(setting)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        Intent::Paste { id } => {
+            if state.shutdown.blocks_connection(id) {
+                return Err("正在处理关闭选择，输入暂时停止。".into());
+            }
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session.paste().await.map_err(|e| e.to_string())?;
+        }
+        Intent::TextStop { id } => {
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session.stop_text().await;
+        }
         Intent::Text { id, values } => {
+            if state.shutdown.blocks_connection(id) {
+                return Err("正在处理关闭选择，输入暂时停止。".into());
+            }
             let mode = amikvm_core::input::TextMode::parse(&text(&values, "mode"))
                 .map_err(|e| e.to_string())?;
             let session = state

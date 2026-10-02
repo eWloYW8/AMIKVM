@@ -1,12 +1,13 @@
 //! Browser events are data only. HID usage mapping and text input live in Rust.
 use crate::{Error, Result, protocol};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub mod encryption;
 pub mod layout;
 pub mod macros;
 pub mod mouse;
+pub mod routing;
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -328,11 +329,14 @@ pub fn parse_hex(text: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TextMode {
     Linux,
     Windows,
+    WindowsWord,
     Macos,
+    #[default]
     Us,
 }
 impl TextMode {
@@ -340,11 +344,50 @@ impl TextMode {
         match mode {
             "linux" => Ok(Self::Linux),
             "windows" => Ok(Self::Windows),
+            "windows_word" => Ok(Self::WindowsWord),
             "macos" => Ok(Self::Macos),
             "us" => Ok(Self::Us),
             _ => Err(Error::Invalid("Unknown text input mode".into())),
         }
     }
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Linux => "linux",
+            Self::Windows => "windows",
+            Self::WindowsWord => "windows_word",
+            Self::Macos => "macos",
+            Self::Us => "us",
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextPhase {
+    #[default]
+    Idle,
+    Running,
+    Complete,
+    Cancelled,
+    Failed,
+}
+#[derive(Default, Clone, Serialize)]
+pub struct TextStatus {
+    pub phase: TextPhase,
+    pub sent: usize,
+    pub total: usize,
+    pub error: Option<String>,
+}
+impl TextStatus {
+    pub fn active(&self) -> bool {
+        matches!(self.phase, TextPhase::Running)
+    }
+}
+
+/// End offsets count complete character sequences, including their key releases.
+pub struct TextPlan {
+    pub reports: Vec<[u8; 8]>,
+    pub ends: Vec<usize>,
 }
 
 fn ascii(c: char) -> Option<(u8, u8)> {
@@ -399,21 +442,26 @@ fn tap(out: &mut Vec<[u8; 8]>, modifiers: u8, key: u8) {
 
 /// Validate the complete string before issuing any input, so unsupported text is never truncated.
 pub fn text_reports(text: &str, mode: TextMode) -> Result<Vec<[u8; 8]>> {
+    Ok(text_plan(text, mode)?.reports)
+}
+pub fn text_plan(text: &str, mode: TextMode) -> Result<TextPlan> {
     if text.len() > 65536 {
         return Err(Error::Invalid("文本长度不能超过 64 KiB".into()));
     }
     let mut out = vec![[0; 8]];
+    let mut ends = vec![];
     let text = text.replace("\r\n", "\n");
     for c in text.chars() {
         if c == '\n' || c == '\r' || c == '\t' {
             let (m, k) = ascii(c).unwrap();
             tap(&mut out, m, k);
+            ends.push(out.len());
             continue;
         }
         match mode {
             TextMode::Us => {
                 let (m, k) = ascii(c).ok_or_else(|| {
-                    Error::Invalid(format!("US 键盘无法直接输入 {c}，请选择 Unicode 输入方式"))
+                    Error::Invalid("US 键盘无法直接输入此字符，请选择 Unicode 输入方式".into())
                 })?;
                 tap(&mut out, m, k);
                 out.push([0; 8]);
@@ -439,6 +487,21 @@ pub fn text_reports(text: &str, mode: TextMode) -> Result<Vec<[u8; 8]>> {
                 }
                 out.push([0; 8]);
             }
+            TextMode::WindowsWord => {
+                // Word converts the selected Unicode scalar with Alt+X. Select
+                // only this code so preceding hex characters cannot join it.
+                let code = format!("{:x}", c as u32);
+                for digit in code.chars() {
+                    let (m, k) = ascii(digit).unwrap();
+                    tap(&mut out, m, k);
+                }
+                for _ in code.chars() {
+                    tap(&mut out, 2, 0x50);
+                }
+                out.push([0; 8]);
+                tap(&mut out, 4, usage("KeyX").unwrap());
+                out.push([0; 8]);
+            }
             TextMode::Macos => {
                 out.push(report(4, &[]));
                 for unit in c.encode_utf16(&mut [0; 2]).iter() {
@@ -450,7 +513,8 @@ pub fn text_reports(text: &str, mode: TextMode) -> Result<Vec<[u8; 8]>> {
                 out.push([0; 8]);
             }
         }
+        ends.push(out.len());
     }
     out.push([0; 8]);
-    Ok(out)
+    Ok(TextPlan { reports: out, ends })
 }

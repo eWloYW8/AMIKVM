@@ -75,8 +75,22 @@ pub fn session(app: &AppHandle, s: &crate::session::Snapshot) {
         id,
         "settings",
         "键鼠输入状态已改变",
-        json!({"encrypted":s.input_encryption,"required":s.encryption_required,"mouseMode":s.mouse_mode}),
+        json!({"encrypted":s.input_encryption,"required":s.encryption_required,"mouseMode":s.mouse_mode,"keyboard":s.keyboard_options}),
         Level::Info,
+    );
+    changed(
+        app,
+        Category::Input,
+        id,
+        "typing",
+        "文本输入状态已改变",
+        json!({"phase":s.text_input.phase,"total":s.text_input.total,
+            "sent":if s.text_input.active() { 0 } else { s.text_input.sent },"error":s.text_input.error}),
+        if matches!(s.text_input.phase, amikvm_core::input::TextPhase::Failed) {
+            Level::Error
+        } else {
+            Level::Info
+        },
     );
     changed(
         app,

@@ -2522,5 +2522,89 @@
   "当前 macOS 支持数据光盘、真实轨道表及光盘信息读取；音频光盘和其他光驱控制仍待补齐。": [
     "macOS supports data discs, actual disc tables of contents and disc information; audio discs and other drive controls remain to be completed.",
     "macOS prend en charge les disques de données, leur table des matières et leurs informations ; les disques audio et les autres commandes restent à compléter."
+  ],
+  "全键盘支持": [
+    "Full keyboard support",
+    "Prise en charge complète du clavier"
+  ],
+  "启用后 Ctrl + F1 和 Alt + T 发送到远端；Ctrl + Shift + L 仍控制本地日志。系统保留组合键可通过上方按钮发送。": [
+    "When enabled, Ctrl + F1 and Alt + T go to the remote host; Ctrl + Shift + L still controls local logging. Use the buttons above for system-reserved combinations.",
+    "Une fois activé, Ctrl + F1 et Alt + T sont envoyés à l’hôte distant ; Ctrl + Shift + L contrôle toujours les journaux locaux. Utilisez les boutons ci-dessus pour les combinaisons réservées au système."
+  ],
+  "Ctrl + V 输入本机剪贴板文本": [
+    "Ctrl + V types local clipboard text",
+    "Ctrl + V saisit le texte du presse-papiers local"
+  ],
+  "文本输入方式": [
+    "Text input method",
+    "Méthode de saisie du texte"
+  ],
+  "Word · Unicode 转换（Alt + X）": [
+    "Word · Unicode conversion (Alt + X)",
+    "Word · Conversion Unicode (Alt + X)"
+  ],
+  "Word 方式需要远端 Word 支持 Alt + X，可输入中文和非 BMP 字符；其他应用请使用对应输入方式。": [
+    "The Word method requires remote Word with Alt + X support and accepts Chinese and non-BMP characters. Use the appropriate input method for other applications.",
+    "La méthode Word nécessite Word sur l’hôte distant avec Alt + X ; elle accepte le chinois et les caractères hors BMP. Utilisez la méthode adaptée aux autres applications."
+  ],
+  "发送本机剪贴板文本": [
+    "Type local clipboard text",
+    "Saisir le texte du presse-papiers local"
+  ],
+  "剪贴板按所选方式转换为键盘输入；不支持的文本会整段拒绝。停止会结束后续输入，已发送内容保留。": [
+    "Clipboard text is converted to keystrokes using the selected method. Unsupported text is rejected in full. Stopping ends further input and keeps what has already been sent.",
+    "Le texte du presse-papiers est converti en frappes selon la méthode choisie. Un texte non pris en charge est entièrement refusé. L’arrêt interrompt la suite et conserve le contenu déjà envoyé."
+  ],
+  "正在发送文本：{sent}/{total} 个字符": [
+    "Typing text: {sent}/{total} characters",
+    "Saisie du texte : {sent}/{total} caractères"
+  ],
+  "文本已发送：{total} 个字符": [
+    "Text sent: {total} characters",
+    "Texte envoyé : {total} caractères"
+  ],
+  "文本输入已停止：{sent}/{total} 个字符": [
+    "Text input stopped: {sent}/{total} characters",
+    "Saisie arrêtée : {sent}/{total} caractères"
+  ],
+  "文本发送失败：{sent}/{total} 个字符": [
+    "Text input failed: {sent}/{total} characters",
+    "Échec de la saisie : {sent}/{total} caractères"
+  ],
+  "停止文本输入": [
+    "Stop text input",
+    "Arrêter la saisie du texte"
+  ],
+  "请先停止当前文本输入": [
+    "Stop the current text input first",
+    "Arrêtez d’abord la saisie en cours"
+  ],
+  "无法读取本机剪贴板文本": [
+    "Unable to read local clipboard text",
+    "Impossible de lire le texte du presse-papiers local"
+  ],
+  "本机剪贴板没有可读取的文本": [
+    "No readable text on the local clipboard",
+    "Aucun texte lisible dans le presse-papiers local"
+  ],
+  "请输入要发送的文本": [
+    "Enter the text to send",
+    "Saisissez le texte à envoyer"
+  ],
+  "文本输入已停止": [
+    "Text input stopped",
+    "Saisie du texte arrêtée"
+  ],
+  "US 键盘无法直接输入此字符，请选择 Unicode 输入方式": [
+    "The US keyboard cannot type this character directly; select a Unicode input method",
+    "Le clavier US ne peut pas saisir ce caractère directement ; choisissez une méthode Unicode"
+  ],
+  "文本长度不能超过 64 KiB": [
+    "Text cannot exceed 64 KiB",
+    "Le texte ne peut pas dépasser 64 KiB"
+  ],
+  "文本输入状态已改变": [
+    "Text input state changed",
+    "État de la saisie du texte modifié"
   ]
 }

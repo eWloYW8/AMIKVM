@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod captures;
+mod clipboard;
 mod commands;
 mod diagnostics;
 mod folders;
@@ -21,8 +22,10 @@ use commands::AppState;
 use tauri::Manager;
 
 fn main() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_clipboard_manager::init());
+    builder
         .setup(|app| {
             let path = app.path().app_config_dir()?.join("servers.json");
             app.manage(AppState::new(path)?);
@@ -58,6 +61,25 @@ fn main() {
             commands::unsubscribe_video,
         ])
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Focused(false)) {
+                let app = window.app_handle().clone();
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(sessions) = state.sessions.try_lock() {
+                        for session in sessions.values() {
+                            session.cancel_text();
+                        }
+                    }
+                }
+                tauri::async_runtime::spawn(async move {
+                    if let Some(state) = app.try_state::<AppState>() {
+                        let sessions: Vec<_> =
+                            state.sessions.lock().await.values().cloned().collect();
+                        for session in sessions {
+                            let _ = session.input(amikvm_core::input::Event::ReleaseAll).await;
+                        }
+                    }
+                });
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle();
                 if !app

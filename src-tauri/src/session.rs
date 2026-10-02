@@ -22,6 +22,7 @@ use tokio::{
 use uuid::Uuid;
 
 mod queue;
+mod text;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +36,8 @@ pub struct Snapshot {
     pub mouse: input::mouse::State,
     pub lock_leds: u8,
     pub software_keys: Vec<u8>,
+    pub keyboard_options: input::routing::Options,
+    pub text_input: input::TextStatus,
     pub input_encryption: bool,
     pub encryption_required: bool,
     pub host_display: Option<u16>,
@@ -88,6 +91,8 @@ impl Snapshot {
             mouse: input::mouse::State::default(),
             lock_leds: 0,
             software_keys: vec![],
+            keyboard_options: Default::default(),
+            text_input: Default::default(),
             input_encryption: false,
             encryption_required: false,
             host_display: None,
@@ -141,6 +146,9 @@ pub struct Session {
     sender: queue::Sender<Outgoing>,
     ready: Arc<AtomicBool>,
     keyboard: Arc<AsyncMutex<input::State>>,
+    text_active: AtomicBool,
+    text_generation: watch::Sender<u64>,
+    text_done: tokio::sync::Notify,
     input_app: AppHandle,
     cancel: watch::Sender<bool>,
     finished: watch::Receiver<bool>,
@@ -165,6 +173,8 @@ enum Outgoing {
     Hid {
         mouse: bool,
         report: Vec<u8>,
+        reply: Option<oneshot::Sender<Result<()>>>,
+        text_generation: Option<u64>,
     },
     Encryption {
         enabled: bool,
@@ -230,6 +240,7 @@ async fn retry_connection(
 impl Session {
     pub async fn start(app: AppHandle, web: WebSession, web_only: bool) -> Result<Self> {
         let keyboard = Arc::new(AsyncMutex::new(input::State::default()));
+        let text_generation = watch::channel(0).0;
         let sequence = Arc::new(AtomicU32::new(0));
         let input_app = app.clone();
         let web = Arc::new(web);
@@ -290,6 +301,9 @@ impl Session {
                 sender,
                 ready: Arc::new(AtomicBool::new(false)),
                 keyboard,
+                text_active: AtomicBool::new(false),
+                text_generation,
+                text_done: tokio::sync::Notify::new(),
                 input_app,
                 cancel,
                 finished,
@@ -328,6 +342,7 @@ impl Session {
         let worker_sender = sender.clone();
         let worker_ready = ready.clone();
         let worker_keyboard = keyboard.clone();
+        let worker_text_generation = text_generation.clone();
         tauri::async_runtime::spawn(async move {
             update(&app, &worker_snapshot, |_| {});
             let session_web = web;
@@ -353,6 +368,7 @@ impl Session {
                         }
                     },
                 };
+                worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                 update(&app, &worker_snapshot, |s| {
                     s.service = Default::default();
                     s.host_display_supported = None;
@@ -376,6 +392,7 @@ impl Session {
                 let writer_media = worker_media.clone();
                 let writer_video = worker_video.clone();
                 let writer_keyboard = worker_keyboard.clone();
+                let writer_text_generation = worker_text_generation.clone();
                 let writer_task = tauri::async_runtime::spawn(async move {
                     let mut heartbeat = tokio::time::interval(Duration::from_secs(1));
                     let mut mouse_clock = tokio::time::interval(Duration::from_millis(25));
@@ -407,6 +424,7 @@ impl Session {
                                         }
                                     };
                                     if effect.release_keyboard && writer_snapshot.lock().is_ok_and(|s| s.can_control && s.video_connected) {
+                                        writer_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                                         writer_keyboard.lock().await.clear();
                                         let release = match protocol::input_report_with_cipher(writer_sequence.fetch_add(1, Ordering::Relaxed), false, &[0; 8], cipher.as_ref()) {
                                             Ok(bytes) => bytes, Err(error) => break Err(error),
@@ -514,19 +532,32 @@ impl Session {
                                     }
                                     if let Some(reply) = reply { let _ = reply.send(Ok(())); }
                                 },
-                                Some(Outgoing::Hid { mouse, report }) => {
+                                Some(Outgoing::Hid { mouse, report, reply, text_generation }) => {
                                     // A report queued before a BMC permission change must not
                                     // reach the host after another session acquires control.
-                                    if !writer_snapshot.lock().is_ok_and(|s| s.can_control) { continue; }
-                                    if !mouse && report.iter().any(|v| *v != 0)
-                                        && writer_snapshot.lock().is_ok_and(|s| s.mouse.active()) { continue; }
+                                    if !writer_ready.load(Ordering::Acquire)
+                                        || !writer_snapshot.lock().is_ok_and(|s| s.can_control)
+                                        || text_generation.is_some_and(|value| value != *writer_text_generation.borrow())
+                                        || reply.as_ref().is_some_and(|reply| reply.is_closed())
+                                        || (!mouse && report.iter().any(|v| *v != 0)
+                                            && writer_snapshot.lock().is_ok_and(|s| s.mouse.active())) {
+                                        if let Some(reply) = reply { let _ = reply.send(Err(Error::Invalid("文本输入已停止".into()))); }
+                                        continue;
+                                    }
                                     let bytes = match protocol::input_report_with_cipher(writer_sequence.fetch_add(1, Ordering::Relaxed), mouse, &report, cipher.as_ref()) {
                                         Ok(bytes) => bytes,
-                                        Err(error) => break Err(error),
+                                        Err(error) => {
+                                            if let Some(reply) = reply { let _ = reply.send(Err(Error::Protocol(error.to_string()))); }
+                                            break Err(error);
+                                        },
                                     };
-                                    if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                                    if let Err(error) = transport::write_packet(&mut writer, &bytes).await {
+                                        if let Some(reply) = reply { let _ = reply.send(Err(Error::Protocol(error.to_string()))); }
+                                        break Err(error);
+                                    }
                                     had_input = true;
                                     if mouse { mouse_length = report.len(); }
+                                    if let Some(reply) = reply { let _ = reply.send(Ok(())); }
                                 },
                                 Some(Outgoing::Encryption { enabled, requested, reply }) => {
                                     let replacement = if enabled { writer_web.input_cipher().map(Some) } else { Ok(None) };
@@ -864,6 +895,7 @@ impl Session {
                                 effect
                             };
                             if worker_snapshot.lock().is_ok_and(|s| !s.can_control) {
+                                worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                                 worker_keyboard.lock().await.clear();
                                 update(&app, &worker_snapshot, |s| s.software_keys.clear());
                             }
@@ -982,6 +1014,7 @@ impl Session {
             .await;
                 // Stop this transport first; no command from it may enter the next one.
                 worker_ready.store(false, Ordering::Release);
+                worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                 update(&app, &worker_snapshot, |s| {
                     s.video_connected = false;
                     s.video_signal = false;
@@ -1080,6 +1113,7 @@ impl Session {
                 }
             };
             worker_ready.store(false, Ordering::Release);
+            worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
             let _ = worker_cancel.send(true);
             worker_media.stop_all().await;
             worker_recordings.shutdown().await;
@@ -1136,6 +1170,9 @@ impl Session {
             sender,
             ready,
             keyboard,
+            text_active: AtomicBool::new(false),
+            text_generation,
+            text_done: tokio::sync::Notify::new(),
             input_app,
             cancel,
             finished,
@@ -1524,12 +1561,15 @@ impl Session {
             .send(Outgoing::Hid {
                 mouse,
                 report: report.to_vec(),
+                reply: None,
+                text_generation: None,
             })
             .await
             .map_err(|_| Error::Protocol("Connection closed".into()))
     }
 
     pub async fn stop(&self) {
+        self.cancel_text();
         let _ = self.cancel.send(true);
         let mut finished = self.finished.clone();
         while !*finished.borrow_and_update() {
@@ -1542,25 +1582,11 @@ impl Session {
     pub async fn tap(&self, report: [u8; 8]) -> Result<()> {
         self.key_input_ready()?;
         let mut keyboard = self.keyboard.lock().await;
+        self.key_input_ready()?;
         let baseline = keyboard.report();
         self.send_keyboard(&mut keyboard, input::merge_reports(baseline, report))
             .await?;
         tokio::time::sleep(Duration::from_millis(35)).await;
-        self.send_keyboard(&mut keyboard, baseline).await
-    }
-
-    pub async fn type_text(&self, text: &str, mode: TextMode) -> Result<()> {
-        self.key_input_ready()?;
-        let reports = input::text_reports(text, mode)?;
-        let mut keyboard = self.keyboard.lock().await;
-        let baseline = keyboard.report();
-        for report in reports {
-            if let Err(error) = self.send_keyboard(&mut keyboard, report).await {
-                let _ = self.hid(false, &[0; 8]).await;
-                return Err(error);
-            }
-            tokio::time::sleep(Duration::from_millis(15)).await;
-        }
         self.send_keyboard(&mut keyboard, baseline).await
     }
 
@@ -1593,7 +1619,7 @@ impl Session {
     pub async fn toggle_modifier(&self, code: &str) -> Result<()> {
         self.key_input_ready()?;
         let mut keyboard = self.keyboard.lock().await;
-        self.input_ready()?;
+        self.key_input_ready()?;
         let report = keyboard.toggle_modifier(code)?;
         self.send_keyboard(&mut keyboard, report).await?;
         update(&self.input_app, &self.snapshot, |s| {
@@ -1603,6 +1629,7 @@ impl Session {
     }
 
     pub async fn release_software(&self) -> Result<()> {
+        self.cancel_text();
         let mut keyboard = self.keyboard.lock().await;
         let report = keyboard.release_software();
         update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
@@ -1613,45 +1640,97 @@ impl Session {
     }
 
     pub async fn input(&self, event: Event) -> Result<()> {
+        if matches!(
+            event,
+            Event::Release | Event::ReleaseAll | Event::SoftKey { pressed: false, .. }
+        ) {
+            self.cancel_text();
+        }
+        if matches!(event, Event::Pointer { buttons, .. } if buttons != 0) {
+            self.cancel_text();
+        }
+        if self.text_active.load(Ordering::Acquire)
+            && matches!(
+                event,
+                Event::Key { .. } | Event::SoftKey { pressed: true, .. }
+            )
+        {
+            return Ok(());
+        }
         if let Event::Key { code, pressed } = &event {
-            if *pressed && matches!(code.as_str(), "KeyL" | "F1") {
+            let local = if *pressed {
+                let (options, mouse_mode) = self
+                    .snapshot
+                    .lock()
+                    .map(|s| (s.keyboard_options, s.mouse_mode))
+                    .map_err(|_| Error::Invalid("Session unavailable".into()))?;
                 let modifiers = self.keyboard.lock().await.report()[0];
-                if modifiers & 0x11 != 0 && (code == "F1" || modifiers & 0x22 != 0) {
-                    let mut keyboard = self.keyboard.lock().await;
-                    keyboard.clear();
-                    update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
-                    self.send_keyboard(&mut keyboard, [0; 8]).await?;
-                    drop(keyboard);
-                    if code == "KeyL" {
-                        let app = self.input_app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            if let Err(error) = crate::ui::toggle_log_file(app.clone()).await {
-                                crate::diagnostics::record(
-                                    &app,
-                                    amikvm_core::diagnostics::Level::Error,
-                                    amikvm_core::diagnostics::Category::Interface,
-                                    None,
-                                    "操作失败",
-                                    &error,
-                                );
-                                let state = app.state::<crate::commands::AppState>();
-                                if let Ok(mut ui) = state.ui.lock() {
-                                    ui.error = Some(error);
-                                }
-                                app.emit("ui-changed", ()).ok();
-                            }
-                        });
-                    } else {
-                        let state = self.input_app.state::<crate::commands::AppState>();
-                        state
-                            .ui
-                            .lock()
-                            .map_err(|_| Error::Invalid("Interface state unavailable".into()))?
-                            .dialog = crate::ui::Dialog::About;
-                        self.input_app.emit("ui-changed", ()).ok();
-                    }
-                    return Ok(());
+                input::routing::local(code, modifiers, options, mouse_mode)
+            } else {
+                None
+            };
+            if let Some(action) = local {
+                use input::routing::Action;
+                if action == Action::Calibrate {
+                    return self.mouse_command(input::mouse::Command::Start, None).await;
                 }
+                let mut keyboard = self.keyboard.lock().await;
+                let report = if action == Action::Paste {
+                    keyboard.release_physical()
+                } else {
+                    keyboard.clear();
+                    [0; 8]
+                };
+                update(&self.input_app, &self.snapshot, |s| {
+                    s.software_keys = keyboard.software_keys()
+                });
+                self.send_keyboard(&mut keyboard, report).await?;
+                drop(keyboard);
+                if action == Action::Paste {
+                    let state = self.input_app.state::<crate::commands::AppState>();
+                    let id = self
+                        .snapshot
+                        .lock()
+                        .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                        .server_id;
+                    let session = state
+                        .sessions
+                        .lock()
+                        .await
+                        .get(&id)
+                        .cloned()
+                        .ok_or_else(|| Error::Invalid("Session not found".into()))?;
+                    return session.paste().await;
+                }
+                if action == Action::Log {
+                    let app = self.input_app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(error) = crate::ui::toggle_log_file(app.clone()).await {
+                            crate::diagnostics::record(
+                                &app,
+                                amikvm_core::diagnostics::Level::Error,
+                                amikvm_core::diagnostics::Category::Interface,
+                                None,
+                                "操作失败",
+                                &error,
+                            );
+                            let state = app.state::<crate::commands::AppState>();
+                            if let Ok(mut ui) = state.ui.lock() {
+                                ui.error = Some(error);
+                            }
+                            app.emit("ui-changed", ()).ok();
+                        }
+                    });
+                } else {
+                    let state = self.input_app.state::<crate::commands::AppState>();
+                    state
+                        .ui
+                        .lock()
+                        .map_err(|_| Error::Invalid("Interface state unavailable".into()))?
+                        .dialog = crate::ui::Dialog::About;
+                    self.input_app.emit("ui-changed", ()).ok();
+                }
+                return Ok(());
             }
             let token = self
                 .snapshot
@@ -1669,13 +1748,6 @@ impl Session {
                     .await
                     .map_err(|_| Error::Protocol("Connection closed".into()))?;
                 return Ok(());
-            }
-            if code == "KeyT"
-                && *pressed
-                && self.snapshot.lock().is_ok_and(|s| s.mouse_mode == Some(1))
-                && self.keyboard.lock().await.report()[0] & 0x44 != 0
-            {
-                return self.mouse_command(input::mouse::Command::Start, None).await;
             }
         }
         match &event {
@@ -1787,6 +1859,9 @@ impl Session {
 
     fn key_input_ready(&self) -> Result<()> {
         self.input_ready()?;
+        if self.text_active.load(Ordering::Acquire) {
+            return Err(Error::Invalid("请先停止当前文本输入".into()));
+        }
         if self.snapshot.lock().is_ok_and(|s| s.mouse.active()) {
             return Err(Error::Invalid("请先结束当前鼠标校准".into()));
         }

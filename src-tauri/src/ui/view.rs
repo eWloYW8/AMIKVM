@@ -2097,7 +2097,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             format!("text-{id}"),
             "modal",
             json!({"action":"text","id":id}),
-            json!({"mode":"linux","text":""}),
+            json!({"mode":sessions.iter().find(|s| s.server_id == id).map_or("us", |s| s.keyboard_options.text_mode.id()),"text":""}),
             vec![
                 heading(
                     tr("输入文本"),
@@ -2110,6 +2110,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                     &[
                         ("linux", "Linux · Ctrl + Shift + U"),
                         ("windows", tr("Windows · Unicode 十六进制输入")),
+                        ("windows_word", tr("Word · Unicode 转换（Alt + X）")),
                         ("macos", "macOS · Unicode Hex Input"),
                         ("us", tr("直接输入 · US 键盘")),
                     ],
@@ -2126,6 +2127,13 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                     "input-help",
                     tr(
                         "Windows 需要启用 EnableHexNumpad；macOS 需要启用 Unicode Hex Input。Linux 使用支持 Ctrl + Shift + U 的输入环境。",
+                    ),
+                ),
+                label(
+                    "p",
+                    "input-help",
+                    tr(
+                        "Word 方式需要远端 Word 支持 Alt + X，可输入中文和非 BMP 字符；其他应用请使用对应输入方式。",
                     ),
                 ),
                 actions(tr("发送文本")),
@@ -2147,7 +2155,8 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
 fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
     let connected = snapshot.is_some_and(|v| v.video_connected);
     let controllable = connected && snapshot.is_some_and(|v| v.can_control);
-    let keyboard_enabled = controllable && snapshot.is_none_or(|v| !v.mouse.active());
+    let keyboard_enabled =
+        controllable && snapshot.is_none_or(|v| !v.mouse.active() && !v.text_input.active());
     let paused = ui.paused.contains(&s.id);
     let zoom = ui.zoom.get(&s.id).copied().unwrap_or_default();
     let mut frame_style = if matches!(zoom, super::Zoom::Fit) {
@@ -2487,6 +2496,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
             json!({"action":"text_dialog","id":s.id}),
             !keyboard_enabled,
         ),
+        keyboard_options(s, snapshot, keyboard_enabled),
         button(
             "button secondary wide",
             if snapshot.is_some_and(|s| s.input_encryption) {
@@ -2670,6 +2680,97 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
         )
     };
     group("div", "console-layout", vec![main, panel])
+}
+
+fn keyboard_options(server: &Server, snapshot: Option<&Snapshot>, enabled: bool) -> Node {
+    let options = snapshot.map_or(Default::default(), |s| s.keyboard_options);
+    let mut children = vec![
+        field(
+            "full_keyboard",
+            tr("全键盘支持"),
+            "checkbox",
+            json!({"className":"checkbox","value":options.full_keyboard,"disabled":!enabled,"action":{"action":"keyboard_option","id":server.id,"setting":"full_keyboard"}}),
+        ),
+        label(
+            "p",
+            "input-help",
+            tr(
+                "启用后 Ctrl + F1 和 Alt + T 发送到远端；Ctrl + Shift + L 仍控制本地日志。系统保留组合键可通过上方按钮发送。",
+            ),
+        ),
+        field(
+            "easy_paste",
+            tr("Ctrl + V 输入本机剪贴板文本"),
+            "checkbox",
+            json!({"className":"checkbox","value":options.easy_paste,"disabled":!enabled,"action":{"action":"keyboard_option","id":server.id,"setting":"easy_paste"}}),
+        ),
+        select(
+            "text_mode",
+            tr("文本输入方式"),
+            &[
+                ("us", tr("直接输入 · US 键盘")),
+                ("linux", "Linux · Ctrl + Shift + U"),
+                ("windows", tr("Windows · Unicode 十六进制输入")),
+                ("windows_word", tr("Word · Unicode 转换（Alt + X）")),
+                ("macos", "macOS · Unicode Hex Input"),
+            ],
+            json!({"value":options.text_mode.id(),"disabled":!enabled,"action":{"action":"keyboard_option","id":server.id,"setting":"text_mode"}}),
+        ),
+        button(
+            "button secondary wide",
+            tr("发送本机剪贴板文本"),
+            "Keyboard",
+            json!({"action":"paste","id":server.id}),
+            !enabled,
+        ),
+        label(
+            "p",
+            "input-help",
+            tr(
+                "剪贴板按所选方式转换为键盘输入；不支持的文本会整段拒绝。停止会结束后续输入，已发送内容保留。",
+            ),
+        ),
+    ];
+    if let Some(status) = snapshot.map(|s| &s.text_input) {
+        use amikvm_core::input::TextPhase;
+        let title = match status.phase {
+            TextPhase::Idle => None,
+            TextPhase::Running => Some(lformat!(
+                "正在发送文本：{sent}/{total} 个字符",
+                sent = status.sent,
+                total = status.total
+            )),
+            TextPhase::Complete => {
+                Some(lformat!("文本已发送：{total} 个字符", total = status.total))
+            }
+            TextPhase::Cancelled => Some(lformat!(
+                "文本输入已停止：{sent}/{total} 个字符",
+                sent = status.sent,
+                total = status.total
+            )),
+            TextPhase::Failed => Some(lformat!(
+                "文本发送失败：{sent}/{total} 个字符",
+                sent = status.sent,
+                total = status.total
+            )),
+        };
+        if let Some(title) = title {
+            children.push(label("p", "input-help", title));
+        }
+        if let Some(error) = &status.error {
+            children.push(label("p", "error-inline", translated(error)));
+        }
+        if status.active() {
+            children.push(button(
+                "button secondary wide",
+                tr("停止文本输入"),
+                "Square",
+                json!({"action":"text_stop","id":server.id}),
+                false,
+            ));
+        }
+    }
+    group("div", "keyboard-text-options", children)
 }
 
 fn mouse_calibration(server: &Server, snapshot: Option<&Snapshot>, controllable: bool) -> Node {
