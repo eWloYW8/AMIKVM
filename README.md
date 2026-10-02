@@ -1,0 +1,77 @@
+# AMIKVM
+
+使用 Tauri、Rust、pnpm 和 React 实现的 AMI BMC 远程控制台。目标是覆盖参考 JViewer 的全部有效功能，采用现代界面，支持 Windows、Linux、macOS，最终运行不依赖 Java/JVM 或原版 JNI。
+
+当前正在实现中。已经接入 Rust 生成的现代界面、服务器管理、系统凭据库、REST/RPC 登录、配置发现、会话协议、AST 视频解码移植、输入转换与 Blowfish 键鼠加密、共享权限、Rust JPEG 截图、源/输出尺寸分离与画面缩放、本地指针显隐、BMC 预览和蓝屏画面抓取、压缩/画质配置、固定与自动带宽、原生 MP4 录制、BMC 录像列表和带锁下载、Rust AST/MP4 回放，以及 ISO/NRG/磁盘镜像重定向、文件夹 FAT 镜像与同步。捕获可从服务器列表独立登录 Web 会话；录像支持 1–1800 秒设置、到时保存和暂停计时，可统一为 1024×768 并记录无信号画面，或保留原分辨率、跳过无信号时间并在尺寸变化时生成新 MP4。共享会话支持并发权限申请、逐次询问／自动仅查看／自动拒绝、控制权转交和活动用户断开；权限与超时由 Rust 管理，控制权切换前结束介质重定向，重要操作使用应用内确认窗口。退出应用或断开服务器时，持有控制权的会话可在 10 秒内选择下一控制者；取消保留连接，超时直接关闭，只有明确确认才转交。IPMI 提供 Hex/ASCII 输入、对应请求与响应记录、完成码和超时状态；OEM 启动选项支持五种设备、仅下次或持续生效，并在应用后重新读取确认。回放支持暂停、停止、重播和定位；MP4 范围为 AMIKVM 生成的 H.264 视频，暂不支持外部重排帧。实体介质、完整原生输入、录像/视频协议边界及其他原版能力仍待补齐，当前版本尚不能作为完整 KVM 客户端交付。具体范围和证据保存在本地分析文档 `docs/`（按项目约定不加入版本控制）。
+
+界面支持简体中文、English 和 Français，可在顶部即时切换并保存选择。语言、翻译和界面模型由 Rust 管理；服务器名称、备注和文件路径保持原文。操作系统文件选择控件使用系统语言，未登记的底层诊断仍保留原文。
+
+诊断日志由 Rust 记录、筛选、分页和导出，支持级别/类别/服务器筛选、控制台输出与 JSONL 文件追加；停止或退出时保存。控制台内 Ctrl+Shift+L 切换文件日志，Ctrl+F1 打开关于窗口，查看实际构建和依赖版本。调试记录包含报文类型和长度，认证与输入正文不转储；日志设置和内存历史当前只在本次运行中保留。
+
+## 开发
+
+需要 Rust、Node.js 和 pnpm，以及对应平台的 [Tauri 开发依赖](https://v2.tauri.app/start/prerequisites/)。
+
+Debian / Ubuntu 的桌面开发依赖：
+
+```sh
+sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+pnpm install
+pnpm desktop
+```
+
+构建检查：
+
+```sh
+pnpm build
+cargo check --workspace
+```
+
+`pnpm dev` 提供前端页面，服务器管理和连接功能需要在 Tauri 桌面应用内运行。
+
+## 目录
+
+- `crates/amikvm-core`：独立于桌面框架的 BMC 登录、协议、传输、输入转换和服务器数据模型。
+- `src-tauri`：Rust 界面模型生成、导航、筛选排序、表单与操作定义、系统凭据库、会话管理和平台打包配置。
+- `src`：React 通用渲染器，只负责显示 Rust 生成的界面模型以及转发交互事件。
+- `scripts/package.mjs`：生成平台交付产物。
+- `docs`：本地源码分析、协议依据及实现进度，按项目约定由 Git 忽略。
+- `JViewer`：本地参考资料，不随应用分发。
+
+## 打包
+
+在对应操作系统运行 `pnpm package`，产物位于 `artifacts/`：
+
+- Windows：单个 `.exe`，使用系统 WebView2。
+- Linux：`.tar.zip`，ZIP 内包含 TAR；解压 TAR 后运行 `AMIKVM`。使用发行版提供的 GTK 3 和 WebKitGTK 4.1。
+- macOS：可打开的 `AMIKVM.app` 文件夹。
+
+Windows 单文件使用 MSVC 目标，Rust 和 OpenH264 的运行库以及 WebView2 加载器静态链接，界面资源嵌入 EXE；运行仍需系统安装 WebView2。打包会核对 PE 架构、GUI 子系统及普通/延迟 DLL 导入，拒绝需要伴随 DLL 的产物。GNU Windows 构建不用于单文件交付。
+
+Linux 主机也可按 [Tauri 的 Windows 交叉编译方式](https://v2.tauri.app/distribute/windows-installer/#build-windows-apps-on-linux-and-macos) 安装 LLVM（`clang-cl`、`lld-link`、`llvm-rc` 在 PATH 中）、Windows Rust 目标和 `cargo-xwin` 后运行：
+
+```sh
+rustup target add x86_64-pc-windows-msvc
+cargo install --locked cargo-xwin
+pnpm package --target x86_64-pc-windows-msvc
+```
+
+`--target` 也可用于显式选择本机架构；`--runner` 可指定 PATH 中的 Cargo runner。macOS `.app` 和 Linux 包仍在对应系统构建。
+
+本地已生成 Linux x64 的 `artifacts/AMIKVM-0.1.0-linux-x64.tar.zip`，并在 Debian 13 检查了解压后独立启动与退出。这是当前开发版本，仍需继续补齐完整功能。
+
+本地也已交叉构建 `artifacts/AMIKVM-0.1.0-windows-x64.exe` 并检查其嵌入资源和系统 DLL 导入；尚未在 Windows 本机运行。macOS 产物尚未构建。
+
+## 数据保存
+
+服务器元数据保存在应用配置目录的 `servers.json`，密码通过系统凭据库保存。未保存密码的服务器在连接时输入密码。针对特定服务器，可以显式启用对自签名或无效证书的信任。
+
+文件夹重定向使用 16–2048 MiB 的 FAT16/FAT32 工作镜像。读写映射停止后先预览，再同步或丢弃修改；退出后未同步的镜像和基线保留在配置目录的 `folders/` 记录中，重新启动后可直接从侧栏处理，无需连接 BMC。镜像须位于源文件夹之外；同步会检查本地冲突，取消时回滚，并保留中断恢复日志。符号链接、特殊文件及 FAT 名称冲突会明确拒绝。
+
+`vendor/fatfs` 保留 fatfs 0.3.6 及其 MIT 许可，修正 UTF-16 长文件名验证，并添加 FAT 修改时间与只读属性设置；变更说明位于 `vendor/fatfs/AMIKVM-CHANGES.md`，许可同时嵌入桌面资源 `licenses/fatfs.txt`。
+
+用户组合键支持创建、编辑、删除和持久保存，每个组合最多 6 个按键、最多保存 20 个，并区分左右修饰键。软键盘提供原版 22 套字符布局、Shift/Caps/AltGr 字符层、日文专用键，支持普通按键按住、修饰键保持、数字键盘和 BMC 锁定键指示；实体键盘失焦时释放实体按键，关闭软键盘、切换控制台或应用失焦时释放对应的保持状态。键盘布局支持原版 18 种选择及自动识别；Linux X11 的系统布局与活动组切换已直接验证，Windows/macOS 识别代码和 Wayland 边界仍待目标平台核对。
+
+相对鼠标模式支持阈值、倍率设置和两步校准，每 750 毫秒移动并显示本地参考标记，提供微调、暂停、确认、取消恢复和左上角同步。校准参数由 Rust 管理，当前应用内按服务器保留；本地参考标记不写入截图和 MP4。校准期间键盘只操作校准流程，窗口失焦时暂停；鼠标模式、画面或控制权限变化会取消校准。原生鼠标捕获及跨平台实际行为仍在实现范围内。
+
+CD/DVD 镜像使用 Rust 的 32 MiB 本地缓存和后台预读，支持 ISO/NRG 逻辑扇区；BMC Boost 模式单独协商，普通连接同样使用本地预读。弹出或停止时清理缓存和预读线程，可写磁盘继续直接读写。

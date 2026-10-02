@@ -1,0 +1,2166 @@
+{
+  "正在登录": [
+    "Logging in",
+    "Connexion en cours"
+  ],
+  "正在连接": [
+    "Connecting",
+    "Connexion en cours"
+  ],
+  "已连接": [
+    "Connected",
+    "Connecté"
+  ],
+  "连接失败": [
+    "Connection failed",
+    "Échec de la connexion"
+  ],
+  "未连接": [
+    "Disconnected",
+    "Déconnecté"
+  ],
+  "关闭": [
+    "Close",
+    "Fermer"
+  ],
+  "取消": [
+    "Cancel",
+    "Annuler"
+  ],
+  "所有服务器": [
+    "All servers",
+    "Tous les serveurs"
+  ],
+  "收藏服务器": [
+    "Favorites",
+    "Favoris"
+  ],
+  "最近连接": [
+    "Recent connections",
+    "Connexions récentes"
+  ],
+  "用户组合键": [
+    "Custom key combinations",
+    "Combinaisons de touches"
+  ],
+  "录像回放": [
+    "Recording playback",
+    "Lecture des enregistrements"
+  ],
+  "{} · 文件夹": [
+    "{} · Folder",
+    "{} · Dossier"
+  ],
+  "连接服务器后，控制台会显示在这里。": [
+    "Connected consoles appear here.",
+    "Les consoles connectées s’affichent ici."
+  ],
+  "工作空间": [
+    "Workspace",
+    "Espace de travail"
+  ],
+  "活动控制台": [
+    "Active consoles",
+    "Consoles actives"
+  ],
+  "控制台与文件夹": [
+    "Consoles and folders",
+    "Consoles et dossiers"
+  ],
+  "准备连接": [
+    "Ready to connect",
+    "Prêt à se connecter"
+  ],
+  "{} 个活动连接": [
+    "{} active connections",
+    "{} connexions actives"
+  ],
+  "关闭 AMIKVM": [
+    "Close AMIKVM",
+    "Fermer AMIKVM"
+  ],
+  "远程访问，尽在掌握": [
+    "Remote access at your fingertips",
+    "Vos consoles à portée de main"
+  ],
+  "关闭提示": [
+    "Dismiss notification",
+    "Fermer la notification"
+  ],
+  "服务器": [
+    "Servers",
+    "Serveurs"
+  ],
+  "服务器总数": [
+    "Total servers",
+    "Nombre de serveurs"
+  ],
+  "台": [
+    "servers",
+    "serveurs"
+  ],
+  "活动连接": [
+    "Active connections",
+    "Connexions actives"
+  ],
+  "个控制台": [
+    "consoles",
+    "consoles"
+  ],
+  "安全连接": [
+    "Secure connections",
+    "Connexions sécurisées"
+  ],
+  "搜索服务器名称、地址或备注…": [
+    "Search names, addresses or notes…",
+    "Rechercher un nom, une adresse ou une note…"
+  ],
+  "搜索服务器": [
+    "Search servers",
+    "Rechercher des serveurs"
+  ],
+  "清空搜索": [
+    "Clear search",
+    "Effacer la recherche"
+  ],
+  "集中管理你的服务器，连接远程控制台。": [
+    "Manage your servers and connect to their remote consoles.",
+    "Gérez vos serveurs et connectez-vous à leurs consoles."
+  ],
+  "添加服务器": [
+    "Add server",
+    "Ajouter un serveur"
+  ],
+  "{} 台服务器": [
+    "{} servers",
+    "{} serveurs"
+  ],
+  "没有找到匹配的服务器": [
+    "No matching servers",
+    "Aucun serveur correspondant"
+  ],
+  "你的下一次连接，从这里开始": [
+    "Your next connection starts here",
+    "Votre prochaine connexion commence ici"
+  ],
+  "收藏你的常用服务器": [
+    "Keep your usual servers in favorites",
+    "Ajoutez vos serveurs habituels aux favoris"
+  ],
+  "你的连接记录会出现在这里": [
+    "Your recent connections appear here",
+    "Vos connexions récentes s’affichent ici"
+  ],
+  "试试其他名称、地址或备注。": [
+    "Try another name, address or note.",
+    "Essayez un autre nom, une autre adresse ou une autre note."
+  ],
+  "添加服务器的 BMC 地址，建立你的远程工作空间。": [
+    "Add a server’s BMC address to start your remote workspace.",
+    "Ajoutez l’adresse BMC d’un serveur pour commencer."
+  ],
+  "从所有服务器中选择一台，开始连接。": [
+    "Choose a server from All servers to connect.",
+    "Choisissez un serveur dans Tous les serveurs pour vous connecter."
+  ],
+  "添加第一台服务器": [
+    "Add your first server",
+    "Ajouter votre premier serveur"
+  ],
+  "远程控制台": [
+    "Remote console",
+    "Console distante"
+  ],
+  "快捷键输入": [
+    "Keyboard shortcuts",
+    "Raccourcis clavier"
+  ],
+  "凭据由系统凭据库保管": [
+    "Credentials are kept in the system credential store",
+    "Les identifiants sont conservés dans le trousseau système"
+  ],
+  "收藏": [
+    "Favorite",
+    "Favori"
+  ],
+  "更多操作": [
+    "More actions",
+    "Autres actions"
+  ],
+  "删除服务器": [
+    "Delete server",
+    "Supprimer le serveur"
+  ],
+  "删除服务器“{}”？": [
+    "Delete server “{}”?",
+    "Supprimer le serveur « {} » ?"
+  ],
+  "抓取预览画面": [
+    "Capture preview",
+    "Capturer un aperçu"
+  ],
+  "查看蓝屏捕获": [
+    "View crash capture",
+    "Afficher la capture de panne"
+  ],
+  "编辑服务器": [
+    "Edit server",
+    "Modifier le serveur"
+  ],
+  "远程管理控制器": [
+    "Remote management controller",
+    "Contrôleur de gestion distant"
+  ],
+  "连接控制台": [
+    "Connect to console",
+    "Se connecter à la console"
+  ],
+  "打开控制台": [
+    "Open console",
+    "Ouvrir la console"
+  ],
+  "连接": [
+    "Connect",
+    "Se connecter"
+  ],
+  "确认操作": [
+    "Confirm action",
+    "Confirmer l’action"
+  ],
+  "请核对以下操作。": [
+    "Review the following action.",
+    "Vérifiez l’action suivante."
+  ],
+  "确认": [
+    "Confirm",
+    "Confirmer"
+  ],
+  "共享会话与控制权限": [
+    "Sharing and control permissions",
+    "Partage et droits de contrôle"
+  ],
+  "查看活动用户、应答权限申请和移交控制。": [
+    "View active users, answer permission requests and hand over control.",
+    "Consultez les utilisateurs, répondez aux demandes et transférez le contrôle."
+  ],
+  "IPMI 命令": [
+    "IPMI commands",
+    "Commandes IPMI"
+  ],
+  "发送原始命令，查看对应的十六进制和 ASCII 响应。": [
+    "Send raw commands and inspect their hexadecimal and ASCII responses.",
+    "Envoyez des commandes brutes et consultez les réponses en hexadécimal et ASCII."
+  ],
+  "清除已完成记录": [
+    "Clear completed entries",
+    "Effacer les entrées terminées"
+  ],
+  "#{} · {} · 编号 {}": [
+    "#{} · {} · Request {}",
+    "#{} · {} · Requête {}"
+  ],
+  "请求 · Hex": [
+    "Request · Hex",
+    "Requête · Hex"
+  ],
+  "请求 · ASCII": [
+    "Request · ASCII",
+    "Requête · ASCII"
+  ],
+  "响应 · 完成码 0x{:04X}": [
+    "Response · Completion code 0x{:04X}",
+    "Réponse · Code de retour 0x{:04X}"
+  ],
+  "（无响应数据）": [
+    "(No response data)",
+    "(Aucune donnée de réponse)"
+  ],
+  "响应 · ASCII": [
+    "Response · ASCII",
+    "Réponse · ASCII"
+  ],
+  "尚无命令记录。": [
+    "No command history yet.",
+    "Aucune commande enregistrée."
+  ],
+  "输入格式": [
+    "Input format",
+    "Format de saisie"
+  ],
+  "十六进制": [
+    "Hexadecimal",
+    "Hexadécimal"
+  ],
+  "原始命令": [
+    "Raw command",
+    "Commande brute"
+  ],
+  "十六进制以空格分隔，支持 0x 前缀；ASCII 原样转为字节。非显示字符在记录中显示为点。": [
+    "Separate hexadecimal bytes with spaces; 0x prefixes are accepted. ASCII is sent as bytes. Nonprinting characters appear as dots in the history.",
+    "Séparez les octets hexadécimaux par des espaces ; les préfixes 0x sont acceptés. L’ASCII est envoyé en octets. Les caractères non imprimables s’affichent comme des points."
+  ],
+  "发送命令": [
+    "Send command",
+    "Envoyer la commande"
+  ],
+  "启动选项": [
+    "Boot options",
+    "Options de démarrage"
+  ],
+  "选择启动设备和生效次数。": [
+    "Choose a boot device and how long the override applies.",
+    "Choisissez le périphérique et la durée de l’option de démarrage."
+  ],
+  "重新读取": [
+    "Read again",
+    "Relire"
+  ],
+  "尚未读取启动选项": [
+    "Boot options have not been read",
+    "Options de démarrage non lues"
+  ],
+  "正在读取启动选项…": [
+    "Reading boot options…",
+    "Lecture des options de démarrage…"
+  ],
+  "正在应用启动选项…": [
+    "Applying boot options…",
+    "Application des options de démarrage…"
+  ],
+  "正在重新读取并确认…": [
+    "Reading back to confirm…",
+    "Relecture pour confirmation…"
+  ],
+  "已读取服务器启动选项": [
+    "Server boot options received",
+    "Options de démarrage reçues"
+  ],
+  "启动选项操作失败": [
+    "Boot options operation failed",
+    "Échec de l’opération de démarrage"
+  ],
+  "当前设备不在原版选项中，请选择设备": [
+    "The current device is outside the original choices; select a device",
+    "Le périphérique actuel est hors des choix d’origine ; choisissez un périphérique"
+  ],
+  "设备代码 0x{:02X}": [
+    "Device code 0x{:02X}",
+    "Code du périphérique 0x{:02X}"
+  ],
+  "服务器返回：{} · {} · {}": [
+    "Server reports: {} · {} · {}",
+    "Réponse du serveur : {} · {} · {}"
+  ],
+  "启动标志有效": [
+    "Boot flags valid",
+    "Indicateurs de démarrage valides"
+  ],
+  "启动覆盖未启用": [
+    "Boot override disabled",
+    "Démarrage prioritaire désactivé"
+  ],
+  "启动设备": [
+    "Boot device",
+    "Périphérique de démarrage"
+  ],
+  "仅下次启动": [
+    "Next boot only",
+    "Prochain démarrage uniquement"
+  ],
+  "取消勾选后持续生效。应用后请通过服务器电源操作启动或重启。": [
+    "Uncheck for a persistent override. After applying, use the server’s power controls to start or restart it.",
+    "Décochez pour une option permanente. Après application, utilisez les commandes d’alimentation pour démarrer ou redémarrer le serveur."
+  ],
+  "应用": [
+    "Apply",
+    "Appliquer"
+  ],
+  "抓取、刷新或保存服务器捕获的画面。": [
+    "Capture, refresh or save the server’s captured image.",
+    "Capturez, actualisez ou enregistrez l’image du serveur."
+  ],
+  "刷新": [
+    "Refresh",
+    "Actualiser"
+  ],
+  "保存 JPEG": [
+    "Save JPEG",
+    "Enregistrer en JPEG"
+  ],
+  "正在抓取 BMC 画面…": [
+    "Capturing the BMC image…",
+    "Capture de l’image BMC…"
+  ],
+  "已保存：{path}": [
+    "Saved: {path}",
+    "Enregistré : {path}"
+  ],
+  "BMC 录像": [
+    "BMC recordings",
+    "Enregistrements BMC"
+  ],
+  "查看服务器保存的录像，下载或在本机回放。": [
+    "View recordings stored on the server, download them or play them locally.",
+    "Consultez les enregistrements du serveur, téléchargez-les ou lisez-les localement."
+  ],
+  "刷新列表": [
+    "Refresh list",
+    "Actualiser la liste"
+  ],
+  "正在读取录像列表…": [
+    "Reading recording list…",
+    "Lecture de la liste des enregistrements…"
+  ],
+  "正在下载：{} / {}": [
+    "Downloading: {} / {}",
+    "Téléchargement : {} / {}"
+  ],
+  "正在下载：{}": [
+    "Downloading: {}",
+    "Téléchargement : {}"
+  ],
+  "取消操作": [
+    "Cancel operation",
+    "Annuler l’opération"
+  ],
+  "下载": [
+    "Download",
+    "Télécharger"
+  ],
+  "回放": [
+    "Play",
+    "Lire"
+  ],
+  "服务器没有可用录像。": [
+    "No recordings available on the server.",
+    "Aucun enregistrement disponible sur le serveur."
+  ],
+  "服务器已断开；已下载的录像仍可从录像回放页面打开。": [
+    "The server is disconnected. Downloaded files can still be opened from Recording playback.",
+    "Le serveur est déconnecté. Les fichiers téléchargés restent accessibles depuis Lecture des enregistrements."
+  ],
+  "保存常用按键组合，在控制台一键发送。": [
+    "Save common key combinations to send from the console.",
+    "Enregistrez des combinaisons de touches à envoyer depuis la console."
+  ],
+  "添加组合键": [
+    "Add key combination",
+    "Ajouter une combinaison"
+  ],
+  "已保存 {} / 20 个 · 每个组合最多 6 个按键": [
+    "{} / 20 saved · Up to 6 keys per combination",
+    "{} / 20 enregistrées · Jusqu’à 6 touches par combinaison"
+  ],
+  "编辑": [
+    "Edit",
+    "Modifier"
+  ],
+  "发送": [
+    "Send",
+    "Envoyer"
+  ],
+  "删除组合键": [
+    "Delete key combination",
+    "Supprimer la combinaison"
+  ],
+  "删除组合键“{}”？": [
+    "Delete key combination “{}”?",
+    "Supprimer la combinaison « {} » ?"
+  ],
+  "还没有用户组合键。添加后会自动保存，供所有服务器使用。": [
+    "No custom combinations yet. Saved combinations are available for every server.",
+    "Aucune combinaison personnalisée. Les combinaisons enregistrées sont disponibles pour tous les serveurs."
+  ],
+  "名称": [
+    "Name",
+    "Nom"
+  ],
+  "例如：打开任务管理器": [
+    "For example: Open Task Manager",
+    "Par exemple : Ouvrir le gestionnaire des tâches"
+  ],
+  "按键 {}": [
+    "Key {}",
+    "Touche {}"
+  ],
+  "未设置": [
+    "Not set",
+    "Non défini"
+  ],
+  "编辑组合键": [
+    "Edit key combination",
+    "Modifier la combinaison"
+  ],
+  "这些按键将同时按下，然后释放。": [
+    "These keys are pressed together, then released.",
+    "Ces touches sont pressées simultanément, puis relâchées."
+  ],
+  "左右 Ctrl、Shift、Alt 和 Win / Command 分别选择。Tab、Print Screen 和系统组合键也可直接从列表中选取。": [
+    "Choose left and right Ctrl, Shift, Alt and Win / Command separately. Tab, Print Screen and system combinations are also in the list.",
+    "Choisissez séparément les touches Ctrl, Maj, Alt et Win / Command gauche et droite. Tab, Impr. écran et les combinaisons système sont aussi disponibles."
+  ],
+  "保存组合键": [
+    "Save key combination",
+    "Enregistrer la combinaison"
+  ],
+  "服务器名称": [
+    "Server name",
+    "Nom du serveur"
+  ],
+  "例如：机房 · 存储服务器": [
+    "For example: Datacenter · Storage server",
+    "Par exemple : Salle serveur · Stockage"
+  ],
+  "主机地址": [
+    "Host address",
+    "Adresse de l’hôte"
+  ],
+  "192.168.1.100 或 bmc.example.com": [
+    "192.168.1.100 or bmc.example.com",
+    "192.168.1.100 ou bmc.example.com"
+  ],
+  "Web 端口": [
+    "Web port",
+    "Port Web"
+  ],
+  "用户名": [
+    "Username",
+    "Nom d’utilisateur"
+  ],
+  "密码": [
+    "Password",
+    "Mot de passe"
+  ],
+  "留空保留已保存密码": [
+    "Leave blank to keep the saved password",
+    "Laissez vide pour conserver le mot de passe"
+  ],
+  "连接时也可以输入": [
+    "You can also enter it when connecting",
+    "Vous pourrez aussi le saisir lors de la connexion"
+  ],
+  "通信协议": [
+    "Communication protocol",
+    "Protocole de communication"
+  ],
+  "BMC 接口": [
+    "BMC API",
+    "Interface BMC"
+  ],
+  "自动识别": [
+    "Auto detect",
+    "Détection automatique"
+  ],
+  "标签（逗号分隔）": [
+    "Tags (comma separated)",
+    "Étiquettes (séparées par des virgules)"
+  ],
+  "备注": [
+    "Notes",
+    "Notes"
+  ],
+  "位置、用途或连接说明": [
+    "Location, purpose or connection notes",
+    "Emplacement, usage ou notes de connexion"
+  ],
+  "将密码保存到系统凭据库": [
+    "Save password in the system credential store",
+    "Enregistrer le mot de passe dans le trousseau système"
+  ],
+  "信任此服务器的自签名或无效证书": [
+    "Trust this server’s self-signed or invalid certificate",
+    "Accepter le certificat autosigné ou invalide de ce serveur"
+  ],
+  "保存连接信息，随时进入远程控制台。": [
+    "Save connection details to open the remote console anytime.",
+    "Enregistrez les informations de connexion pour ouvrir la console à tout moment."
+  ],
+  "保存服务器": [
+    "Save server",
+    "Enregistrer le serveur"
+  ],
+  "连接 {}": [
+    "Connect to {}",
+    "Se connecter à {}"
+  ],
+  "连接密码": [
+    "Connection password",
+    "Mot de passe de connexion"
+  ],
+  "登录并抓取画面": [
+    "Log in and capture image",
+    "Se connecter et capturer l’image"
+  ],
+  "硬盘介质实例": [
+    "Hard disk media instance",
+    "Instance de disque dur"
+  ],
+  "实例 {}": [
+    "Instance {}",
+    "Instance {}"
+  ],
+  "重定向文件夹": [
+    "Redirect folder",
+    "Rediriger un dossier"
+  ],
+  "将本地文件夹映射为远程 USB 存储。": [
+    "Map a local folder to remote USB storage.",
+    "Présentez un dossier local comme un stockage USB distant."
+  ],
+  "工作镜像容量（MiB）": [
+    "Working image capacity (MiB)",
+    "Capacité de l’image de travail (MiB)"
+  ],
+  "以只读方式连接": [
+    "Connect read-only",
+    "Connexion en lecture seule"
+  ],
+  "随后选择文件夹和工作镜像的新文件名。关闭只读后，可以停止连接、预览修改，再同步回原文件夹。工作镜像须保存在文件夹之外。": [
+    "Next, choose a folder and a new working image filename. In writable mode, stop the connection, review changes and sync them back to the folder. Save the working image outside that folder.",
+    "Choisissez ensuite un dossier et le nom de l’image de travail. En mode écriture, arrêtez la connexion, vérifiez les modifications et synchronisez-les avec le dossier. Enregistrez l’image en dehors de ce dossier."
+  ],
+  "选择文件夹和工作镜像": [
+    "Choose folder and working image",
+    "Choisir le dossier et l’image"
+  ],
+  "同步文件夹修改": [
+    "Sync folder changes",
+    "Synchroniser les modifications"
+  ],
+  "检查远程修改后再写回本地文件夹。": [
+    "Review remote changes before writing them to the local folder.",
+    "Vérifiez les modifications distantes avant de les appliquer au dossier local."
+  ],
+  "远程变化 {} 项 · 本地冲突 {} 项": [
+    "{} remote changes · {} local conflicts",
+    "{} modifications distantes · {} conflits locaux"
+  ],
+  "预览显示前 100 项；同步会处理全部变化。": [
+    "The preview shows the first 100 entries; synchronization processes all changes.",
+    "L’aperçu affiche les 100 premières entrées ; la synchronisation traite toutes les modifications."
+  ],
+  "以下文件在本地也有修改，覆盖会替换这些本地修改。保留工作镜像可以稍后处理。": [
+    "These files also changed locally. Overwriting replaces those local changes. Keep the working image to resolve them later.",
+    "Ces fichiers ont aussi changé localement. L’écrasement remplace ces modifications locales. Conservez l’image de travail pour les traiter plus tard."
+  ],
+  "覆盖冲突并同步": [
+    "Overwrite conflicts and sync",
+    "Écraser les conflits et synchroniser"
+  ],
+  "同步修改": [
+    "Sync changes",
+    "Synchroniser les modifications"
+  ],
+  "覆盖预览中的 {} 项本地冲突，并同步远程修改？": [
+    "Overwrite the {} local conflicts shown and sync remote changes?",
+    "Écraser les {} conflits locaux affichés et synchroniser les modifications distantes ?"
+  ],
+  "保留工作镜像": [
+    "Keep working image",
+    "Conserver l’image de travail"
+  ],
+  "介质实例": [
+    "Media instance",
+    "Instance du média"
+  ],
+  "重定向 CD/DVD 镜像": [
+    "Redirect CD/DVD image",
+    "Rediriger une image CD/DVD"
+  ],
+  "重定向硬盘 / USB 镜像": [
+    "Redirect hard disk / USB image",
+    "Rediriger une image disque / USB"
+  ],
+  "重定向软盘镜像": [
+    "Redirect floppy image",
+    "Rediriger une image de disquette"
+  ],
+  "选择镜像后作为远程服务器的 USB 介质使用。": [
+    "Choose an image to present as USB media to the remote server.",
+    "Choisissez une image à présenter comme média USB au serveur distant."
+  ],
+  "向 BMC 报告为 USB 存储": [
+    "Report as USB storage to the BMC",
+    "Signaler un stockage USB au BMC"
+  ],
+  "关闭只读后，远程系统的写入会保存到所选镜像。": [
+    "With read-only disabled, the remote system’s writes are saved in the selected image.",
+    "Si la lecture seule est désactivée, les écritures du système distant sont enregistrées dans l’image choisie."
+  ],
+  "请求 BMC 介质加速模式": [
+    "Request BMC media acceleration",
+    "Demander l’accélération des médias au BMC"
+  ],
+  "CD/DVD 镜像以只读方式连接。BMC 决定是否允许加速模式。": [
+    "CD/DVD images are read-only. The BMC decides whether acceleration is allowed.",
+    "Les images CD/DVD sont en lecture seule. Le BMC décide si l’accélération est autorisée."
+  ],
+  "选择镜像并连接": [
+    "Choose image and connect",
+    "Choisir l’image et se connecter"
+  ],
+  "输入文本": [
+    "Enter text",
+    "Saisir du texte"
+  ],
+  "选择远程系统的 Unicode 输入方式。": [
+    "Choose the remote system’s Unicode input method.",
+    "Choisissez la méthode de saisie Unicode du système distant."
+  ],
+  "远程系统": [
+    "Remote system",
+    "Système distant"
+  ],
+  "Windows · Unicode 十六进制输入": [
+    "Windows · Unicode hexadecimal input",
+    "Windows · Saisie Unicode hexadécimale"
+  ],
+  "直接输入 · US 键盘": [
+    "Direct input · US keyboard",
+    "Saisie directe · Clavier US"
+  ],
+  "文本": [
+    "Text",
+    "Texte"
+  ],
+  "Windows 需要启用 EnableHexNumpad；macOS 需要启用 Unicode Hex Input。Linux 使用支持 Ctrl + Shift + U 的输入环境。": [
+    "Windows needs EnableHexNumpad; macOS needs Unicode Hex Input. Linux needs an input environment supporting Ctrl + Shift + U.",
+    "Windows nécessite EnableHexNumpad ; macOS nécessite Unicode Hex Input. Linux nécessite un environnement acceptant Ctrl + Maj + U."
+  ],
+  "发送文本": [
+    "Send text",
+    "Envoyer le texte"
+  ],
+  "关闭软键盘": [
+    "Close on-screen keyboard",
+    "Fermer le clavier visuel"
+  ],
+  "打开软键盘": [
+    "Open on-screen keyboard",
+    "Ouvrir le clavier visuel"
+  ],
+  "刷新画面": [
+    "Refresh image",
+    "Actualiser l’image"
+  ],
+  "恢复画面": [
+    "Resume image",
+    "Reprendre l’affichage"
+  ],
+  "暂停画面": [
+    "Pause image",
+    "Suspendre l’affichage"
+  ],
+  "全屏": [
+    "Fullscreen",
+    "Plein écran"
+  ],
+  "保存 JPEG 截图": [
+    "Save JPEG screenshot",
+    "Enregistrer une capture JPEG"
+  ],
+  "共享会话": [
+    "Shared session",
+    "Session partagée"
+  ],
+  "{requests} 个权限申请": [
+    "{requests} permission requests",
+    "{requests} demandes d’autorisation"
+  ],
+  "断开连接": [
+    "Disconnect",
+    "Déconnecter"
+  ],
+  "重新连接": [
+    "Reconnect",
+    "Reconnecter"
+  ],
+  "正在登录服务器": [
+    "Logging into the server",
+    "Connexion au serveur"
+  ],
+  "正在建立控制台连接": [
+    "Establishing console connection",
+    "Connexion à la console"
+  ],
+  "Web 会话已连接": [
+    "Web session connected",
+    "Session Web connectée"
+  ],
+  "虚拟介质会话": [
+    "Virtual media session",
+    "Session de média virtuel"
+  ],
+  "等待远程画面": [
+    "Waiting for remote image",
+    "En attente de l’image distante"
+  ],
+  "控制台未连接": [
+    "Console disconnected",
+    "Console déconnectée"
+  ],
+  "单端口": [
+    "Single port",
+    "Port unique"
+  ],
+  "独立端口": [
+    "Separate ports",
+    "Ports distincts"
+  ],
+  "控制权限": [
+    "Control permissions",
+    "Droits de contrôle"
+  ],
+  "仅查看": [
+    "View only",
+    "Lecture seule"
+  ],
+  "菜单键": [
+    "Menu key",
+    "Touche Menu"
+  ],
+  "鼠标模式": [
+    "Mouse mode",
+    "Mode souris"
+  ],
+  "绝对定位": [
+    "Absolute positioning",
+    "Position absolue"
+  ],
+  "相对移动": [
+    "Relative movement",
+    "Mouvement relatif"
+  ],
+  "其他模式": [
+    "Other mode",
+    "Autre mode"
+  ],
+  "键盘布局": [
+    "Keyboard layout",
+    "Disposition du clavier"
+  ],
+  "开机": [
+    "Power on",
+    "Allumer"
+  ],
+  "正常关机": [
+    "Graceful shutdown",
+    "Arrêt normal"
+  ],
+  "重启": [
+    "Restart",
+    "Redémarrer"
+  ],
+  "电源循环": [
+    "Power cycle",
+    "Cycle d’alimentation"
+  ],
+  "强制关机": [
+    "Force power off",
+    "Arrêt forcé"
+  ],
+  "对 {} 执行“{title}”？": [
+    "Run “{title}” on {}?",
+    "Exécuter « {title} » sur {} ?"
+  ],
+  "键盘与鼠标": [
+    "Keyboard and mouse",
+    "Clavier et souris"
+  ],
+  "发送 Ctrl + Alt + Del": [
+    "Send Ctrl + Alt + Del",
+    "Envoyer Ctrl + Alt + Suppr"
+  ],
+  "输入 Unicode 文本": [
+    "Enter Unicode text",
+    "Saisir du texte Unicode"
+  ],
+  "关闭键鼠加密": [
+    "Disable input encryption",
+    "Désactiver le chiffrement des entrées"
+  ],
+  "开启键鼠加密": [
+    "Enable input encryption",
+    "Activer le chiffrement des entrées"
+  ],
+  "BMC 已要求启用键盘和鼠标加密": [
+    "The BMC requires keyboard and mouse encryption",
+    "Le BMC exige le chiffrement du clavier et de la souris"
+  ],
+  "键盘和鼠标输入已加密": [
+    "Keyboard and mouse input is encrypted",
+    "Les entrées clavier et souris sont chiffrées"
+  ],
+  "键盘和鼠标输入未加密": [
+    "Keyboard and mouse input is unencrypted",
+    "Les entrées clavier et souris ne sont pas chiffrées"
+  ],
+  "显示本地指针": [
+    "Show local pointer",
+    "Afficher le pointeur local"
+  ],
+  "隐藏本地指针": [
+    "Hide local pointer",
+    "Masquer le pointeur local"
+  ],
+  "本机布局：{}": [
+    "Host layout: {}",
+    "Disposition locale : {}"
+  ],
+  "正在识别本机键盘布局…": [
+    "Detecting the host keyboard layout…",
+    "Détection de la disposition du clavier local…"
+  ],
+  "申请控制权限": [
+    "Request control",
+    "Demander le contrôle"
+  ],
+  "查看 BMC 录像": [
+    "View BMC recordings",
+    "Voir les enregistrements BMC"
+  ],
+  "服务器电源": [
+    "Server power",
+    "Alimentation du serveur"
+  ],
+  "已开机": [
+    "Powered on",
+    "Allumé"
+  ],
+  "已关机": [
+    "Powered off",
+    "Éteint"
+  ],
+  "未知": [
+    "Unknown",
+    "Inconnu"
+  ],
+  "主机显示": [
+    "Host display",
+    "Affichage de l’hôte"
+  ],
+  "解锁主机显示": [
+    "Unlock host display",
+    "Déverrouiller l’affichage de l’hôte"
+  ],
+  "锁定主机显示": [
+    "Lock host display",
+    "Verrouiller l’affichage de l’hôte"
+  ],
+  "服务器启动与 IPMI": [
+    "Boot and IPMI",
+    "Démarrage et IPMI"
+  ],
+  "IPMI 命令与响应": [
+    "IPMI commands and responses",
+    "Commandes et réponses IPMI"
+  ],
+  "相对鼠标模式提供阈值、倍率校准与左上角同步。": [
+    "Relative mouse mode offers threshold and gain calibration and top-left synchronization.",
+    "Le mode relatif permet de calibrer le seuil et le gain, et de synchroniser en haut à gauche."
+  ],
+  "鼠标校准与同步": [
+    "Mouse calibration and sync",
+    "Calibration et synchronisation de la souris"
+  ],
+  "加速阈值": [
+    "Acceleration threshold",
+    "Seuil d’accélération"
+  ],
+  "加速倍率": [
+    "Acceleration gain",
+    "Gain d’accélération"
+  ],
+  "应用参数并同步": [
+    "Apply settings and sync",
+    "Appliquer et synchroniser"
+  ],
+  "开始两步校准": [
+    "Start two-step calibration",
+    "Démarrer la calibration en deux étapes"
+  ],
+  "比较红色参考标记与远端光标。用 + / − 调节阈值，找到首次不同步的读数。": [
+    "Compare the red marker to the remote pointer. Use + / − to adjust the threshold until they first become misaligned.",
+    "Comparez le repère rouge au pointeur distant. Réglez le seuil avec + / − jusqu’à leur premier décalage."
+  ],
+  "确认此读数是参考标记与远端光标首次不同步时的阈值。": [
+    "Confirm that this is the threshold at which the marker and pointer first become misaligned.",
+    "Confirmez que ce seuil correspond au premier décalage entre le repère et le pointeur."
+  ],
+  "用 + / − 调整倍率，Alt + 加减可微调 0.1，找到两者同步的读数。": [
+    "Adjust the gain with + / −; Alt plus these keys adjusts by 0.1. Find the value at which both pointers align.",
+    "Réglez le gain avec + / − ; Alt permet un réglage de 0,1. Trouvez la valeur qui aligne les deux pointeurs."
+  ],
+  "确认此倍率能让红色参考标记与远端光标同步。": [
+    "Confirm that this gain aligns the red marker and remote pointer.",
+    "Confirmez que ce gain aligne le repère rouge et le pointeur distant."
+  ],
+  "阈值 {} · 倍率 {}{}": [
+    "Threshold {} · Gain {}{}",
+    "Seuil {} · Gain {}{}"
+  ],
+  " · 已暂停": [
+    " · Paused",
+    " · En pause"
+  ],
+  "记录首次不同步的阈值": [
+    "Record the first misaligned threshold",
+    "Noter le seuil du premier décalage"
+  ],
+  "记录已同步的倍率": [
+    "Record the aligned gain",
+    "Noter le gain aligné"
+  ],
+  "继续校准": [
+    "Resume calibration",
+    "Reprendre la calibration"
+  ],
+  "暂停校准": [
+    "Pause calibration",
+    "Suspendre la calibration"
+  ],
+  "保存阈值并校准倍率": [
+    "Save threshold and calibrate gain",
+    "Enregistrer le seuil et calibrer le gain"
+  ],
+  "保存加速倍率": [
+    "Save acceleration gain",
+    "Enregistrer le gain d’accélération"
+  ],
+  "返回继续调整": [
+    "Return to adjustments",
+    "Revenir aux réglages"
+  ],
+  "取消未确认的校准": [
+    "Cancel unconfirmed calibration",
+    "Annuler la calibration non confirmée"
+  ],
+  "点击远端画面后可用 Alt + T 记录读数，Enter 确认，Esc 取消；窗口失焦时暂停。": [
+    "Focus the remote image: Alt + T records, Enter confirms, Esc cancels. Losing window focus pauses calibration.",
+    "Cliquez sur l’image distante : Alt + T note la valeur, Entrée confirme, Échap annule. La perte de focus suspend la calibration."
+  ],
+  "同步到左上角": [
+    "Sync to top-left",
+    "Synchroniser en haut à gauche"
+  ],
+  "校准与同步需要相对模式、远端画面及控制权限。": [
+    "Calibration and sync require relative mode, a remote image and control permission.",
+    "La calibration et la synchronisation nécessitent le mode relatif, une image distante et le droit de contrôle."
+  ],
+  "BMC 捕获画面": [
+    "BMC captured images",
+    "Images capturées par le BMC"
+  ],
+  "空格": [
+    "Space",
+    "Espace"
+  ],
+  "菜单": [
+    "Menu",
+    "Menu"
+  ],
+  "無変換": [
+    "無変換",
+    "無変換"
+  ],
+  "変換": [
+    "変換",
+    "変換"
+  ],
+  " · 点击保持或释放": [
+    " · Click to hold or release",
+    " · Cliquez pour maintenir ou relâcher"
+  ],
+  "管理组合键": [
+    "Manage key combinations",
+    "Gérer les combinaisons"
+  ],
+  "跟随键盘布局": [
+    "Follow keyboard layout",
+    "Suivre la disposition du clavier"
+  ],
+  "软键盘字符": [
+    "On-screen keyboard characters",
+    "Caractères du clavier visuel"
+  ],
+  "{} · 远端系统需使用对应布局": [
+    "{} · The remote system must use this layout",
+    "{} · Le système distant doit utiliser cette disposition"
+  ],
+  "尚未识别本机布局，暂用 US 字符；可在此手动选择。": [
+    "Host layout not detected; using US characters. You can choose a layout here.",
+    "Disposition locale non détectée ; caractères US utilisés. Vous pouvez choisir une disposition ici."
+  ],
+  "软键盘": [
+    "On-screen keyboard",
+    "Clavier visuel"
+  ],
+  "点击保持修饰键；普通按键支持按住。": [
+    "Click to hold modifiers; ordinary keys support pressing and holding.",
+    "Cliquez pour maintenir les modificateurs ; les touches ordinaires peuvent être maintenues."
+  ],
+  "释放所有按键": [
+    "Release all keys",
+    "Relâcher toutes les touches"
+  ],
+  "适应窗口": [
+    "Fit window",
+    "Adapter à la fenêtre"
+  ],
+  "实际尺寸 · 100%": [
+    "Actual size · 100%",
+    "Taille réelle · 100 %"
+  ],
+  "窗口适应主机尺寸": [
+    "Resize window to host",
+    "Adapter la fenêtre à l’hôte"
+  ],
+  "画面显示": [
+    "Image display",
+    "Affichage de l’image"
+  ],
+  "画面缩放": [
+    "Image scaling",
+    "Échelle de l’image"
+  ],
+  "缩小": [
+    "Zoom out",
+    "Réduire"
+  ],
+  "放大": [
+    "Zoom in",
+    "Agrandir"
+  ],
+  "视频压缩": [
+    "Video compression",
+    "Compression vidéo"
+  ],
+  "YUV 444 · 2 色 VQ": [
+    "YUV 444 · 2-color VQ",
+    "YUV 444 · VQ 2 couleurs"
+  ],
+  "YUV 444 · 4 色 VQ": [
+    "YUV 444 · 4-color VQ",
+    "YUV 444 · VQ 4 couleurs"
+  ],
+  "DCT 画质": [
+    "DCT quality",
+    "Qualité DCT"
+  ],
+  "0 · 最低": [
+    "0 · Lowest",
+    "0 · Minimum"
+  ],
+  "7 · 最高": [
+    "7 · Highest",
+    "7 · Maximum"
+  ],
+  "视频带宽": [
+    "Video bandwidth",
+    "Bande passante vidéo"
+  ],
+  "正在测量带宽…": [
+    "Measuring bandwidth…",
+    "Mesure de la bande passante…"
+  ],
+  "自动检测带宽": [
+    "Detect bandwidth automatically",
+    "Détecter la bande passante"
+  ],
+  "实测 {:.1} Mbps": [
+    "Measured {:.1} Mbps",
+    "Mesuré : {:.1} Mbps"
+  ],
+  "管理共享 · {} 个申请": [
+    "Manage sharing · {} requests",
+    "Gérer le partage · {} demandes"
+  ],
+  "刷新会话列表": [
+    "Refresh sessions",
+    "Actualiser les sessions"
+  ],
+  "后续控制权限申请": [
+    "Future permission requests",
+    "Prochaines demandes d’autorisation"
+  ],
+  "逐次询问": [
+    "Ask each time",
+    "Demander à chaque fois"
+  ],
+  "自动仅允许查看": [
+    "Automatically allow viewing only",
+    "Autoriser automatiquement la lecture seule"
+  ],
+  "自动拒绝访问": [
+    "Automatically deny access",
+    "Refuser automatiquement l’accès"
+  ],
+  "自动策略作用于后续申请；控制权限由 BMC 确认。": [
+    "The policy applies to future requests; the BMC confirms control permissions.",
+    "La règle s’applique aux prochaines demandes ; le BMC confirme les droits de contrôle."
+  ],
+  "等待控制权限应答": [
+    "Waiting for control permission response",
+    "En attente d’une réponse à la demande de contrôle"
+  ],
+  "正在移交控制权限": [
+    "Handing over control",
+    "Transfert du contrôle"
+  ],
+  "{title}{user} · 剩余 {} 秒": [
+    "{title}{user} · {} seconds left",
+    "{title}{user} · {} secondes restantes"
+  ],
+  "{}（{}）申请{}": [
+    "{} ({}) requests {}",
+    "{} ({}) demande {}"
+  ],
+  "访问": [
+    "access",
+    "l’accès"
+  ],
+  "{} · 会话 #{} · 剩余 {} 秒": [
+    "{} · Session #{} · {} seconds left",
+    "{} · Session #{} · {} secondes restantes"
+  ],
+  "允许控制": [
+    "Allow control",
+    "Autoriser le contrôle"
+  ],
+  "拒绝访问": [
+    "Deny access",
+    "Refuser l’accès"
+  ],
+  "仅查看并自动应答": [
+    "View only and answer automatically",
+    "Lecture seule et réponse automatique"
+  ],
+  "拒绝并阻止后续申请": [
+    "Deny and block future requests",
+    "Refuser et bloquer les prochaines demandes"
+  ],
+  "将控制权限交给 {}？活动介质重定向将终止。": [
+    "Give control to {}? Active media redirection will stop.",
+    "Donner le contrôle à {} ? Les redirections de médias actives seront arrêtées."
+  ],
+  " · 当前会话": [
+    " · Current session",
+    " · Session actuelle"
+  ],
+  "会话 #{} · {}": [
+    "Session #{} · {}",
+    "Session #{} · {}"
+  ],
+  "转交控制": [
+    "Hand over control",
+    "Transférer le contrôle"
+  ],
+  "将控制权限转交给 {}？活动介质重定向将终止。": [
+    "Hand over control to {}? Active media redirection will stop.",
+    "Transférer le contrôle à {} ? Les redirections de médias actives seront arrêtées."
+  ],
+  "断开会话": [
+    "Disconnect session",
+    "Déconnecter la session"
+  ],
+  "断开 {} 的远程会话？": [
+    "Disconnect {}’s remote session?",
+    "Déconnecter la session distante de {} ?"
+  ],
+  "虚拟介质": [
+    "Virtual media",
+    "Médias virtuels"
+  ],
+  "CD / DVD 镜像": [
+    "CD / DVD image",
+    "Image CD / DVD"
+  ],
+  "硬盘 / USB 镜像": [
+    "Hard disk / USB image",
+    "Image disque / USB"
+  ],
+  "软盘镜像": [
+    "Floppy image",
+    "Image de disquette"
+  ],
+  "远程已弹出": [
+    "Ejected remotely",
+    "Éjecté à distance"
+  ],
+  "BMC 已终止": [
+    "Terminated by BMC",
+    "Terminé par le BMC"
+  ],
+  "BMC 服务重启": [
+    "BMC service restarted",
+    "Service BMC redémarré"
+  ],
+  "已断开": [
+    "Disconnected",
+    "Déconnecté"
+  ],
+  "{} · 实例 {} · {phase}": [
+    "{} · Instance {} · {phase}",
+    "{} · Instance {} · {phase}"
+  ],
+  "磁盘": [
+    "Disk",
+    "Disque"
+  ],
+  "{} · 读 {} KiB / 写 {} KiB{}": [
+    "{} · Read {} KiB / Written {} KiB{}",
+    "{} · Lus : {} KiB / Écrits : {} KiB{}"
+  ],
+  "只读": [
+    "Read-only",
+    "Lecture seule"
+  ],
+  "读写": [
+    "Read/write",
+    "Lecture/écriture"
+  ],
+  "本地预读 · 缓存 {:.1} MiB · 命中 {} 次": [
+    "Local read-ahead · {:.1} MiB cached · {} hits",
+    "Prélecture locale · {:.1} MiB en cache · {} accès servis"
+  ],
+  "断开介质": [
+    "Disconnect media",
+    "Déconnecter le média"
+  ],
+  "文件夹重定向": [
+    "Folder redirection",
+    "Redirection de dossiers"
+  ],
+  "连接本地文件夹": [
+    "Connect local folder",
+    "Connecter un dossier local"
+  ],
+  "正在创建": [
+    "Creating",
+    "Création en cours"
+  ],
+  "正在预览": [
+    "Previewing",
+    "Prévisualisation en cours"
+  ],
+  "正在同步": [
+    "Syncing",
+    "Synchronisation en cours"
+  ],
+  "等待同步确认": [
+    "Awaiting sync confirmation",
+    "En attente de confirmation"
+  ],
+  "创建失败": [
+    "Creation failed",
+    "Échec de la création"
+  ],
+  "工作镜像已保留": [
+    "Working image kept",
+    "Image de travail conservée"
+  ],
+  "实例 {} · {phase}": [
+    "Instance {} · {phase}",
+    "Instance {} · {phase}"
+  ],
+  "读写 · 同步前会检查本地冲突": [
+    "Read/write · Local conflicts are checked before sync",
+    "Lecture/écriture · Les conflits locaux sont vérifiés avant synchronisation"
+  ],
+  "{} · {} 项 · {} / {} KiB": [
+    "{} · {} entries · {} / {} KiB",
+    "{} · {} entrées · {} / {} KiB"
+  ],
+  "停止并预览同步": [
+    "Stop and preview sync",
+    "Arrêter et prévisualiser"
+  ],
+  "预览同步": [
+    "Preview sync",
+    "Prévisualiser la synchronisation"
+  ],
+  "断开并删除工作镜像": [
+    "Disconnect and delete working image",
+    "Déconnecter et supprimer l’image"
+  ],
+  "丢弃远程修改": [
+    "Discard remote changes",
+    "Abandonner les modifications distantes"
+  ],
+  "断开映射并删除工作镜像？原始文件夹不会改变。": [
+    "Disconnect the mapping and delete its working image? The original folder stays unchanged.",
+    "Déconnecter le dossier et supprimer son image de travail ? Le dossier d’origine restera inchangé."
+  ],
+  "丢弃工作镜像中的远程修改？原始文件夹不会改变。": [
+    "Discard remote changes in the working image? The original folder stays unchanged.",
+    "Abandonner les modifications distantes de l’image ? Le dossier d’origine restera inchangé."
+  ],
+  "MP4 录制": [
+    "MP4 recording",
+    "Enregistrement MP4"
+  ],
+  "停止并保存录制": [
+    "Stop and save recording",
+    "Arrêter et enregistrer"
+  ],
+  "录制时长（秒）": [
+    "Recording length (seconds)",
+    "Durée d’enregistrement (secondes)"
+  ],
+  "分辨率与无信号策略": [
+    "Resolution and no-signal policy",
+    "Résolution et absence de signal"
+  ],
+  "统一模式记录无信号画面；原分辨率模式跳过无信号时间，尺寸变化时分文件。": [
+    "Normalized mode records a no-signal image. Native resolution skips no-signal time and starts a new file when dimensions change.",
+    "Le mode normalisé enregistre une image sans signal. La résolution native ignore ces périodes et crée un nouveau fichier lors d’un changement de dimensions."
+  ],
+  "开始录制": [
+    "Start recording",
+    "Démarrer l’enregistrement"
+  ],
+  "达到指定时长后自动保存；暂停时间不计入时长。": [
+    "Automatically saved when the specified length is reached; pauses are not counted.",
+    "Enregistrement automatique à la durée indiquée ; les pauses ne sont pas comptées."
+  ],
+  "成品 {} · 跳过无信号 {}": [
+    "Recorded {} · Skipped no signal {}",
+    "Enregistré : {} · Sans signal ignoré : {}"
+  ],
+  "等待视频信号，尚未生成录像文件。": [
+    "Waiting for video signal; no recording file created yet.",
+    "En attente du signal vidéo ; aucun fichier créé pour le moment."
+  ],
+  "继续录制": [
+    "Resume recording",
+    "Reprendre l’enregistrement"
+  ],
+  "暂停录制": [
+    "Pause recording",
+    "Suspendre l’enregistrement"
+  ],
+  "文件 {}：{}": [
+    "File {}: {}",
+    "Fichier {} : {}"
+  ],
+  "目标：{path}": [
+    "Target: {path}",
+    "Destination : {path}"
+  ],
+  "打开 AMIKVM 录制的 MP4，或从 BMC 下载的 AST 录像。": [
+    "Open an MP4 recorded by AMIKVM or an AST recording downloaded from the BMC.",
+    "Ouvrez un MP4 enregistré par AMIKVM ou un enregistrement AST téléchargé du BMC."
+  ],
+  "打开录像文件": [
+    "Open recording",
+    "Ouvrir un enregistrement"
+  ],
+  "正在读取录像": [
+    "Reading recording",
+    "Lecture du fichier"
+  ],
+  "正在定位画面": [
+    "Seeking",
+    "Recherche de l’image"
+  ],
+  "正在回放": [
+    "Playing",
+    "Lecture en cours"
+  ],
+  "已暂停": [
+    "Paused",
+    "En pause"
+  ],
+  "回放结束": [
+    "Playback ended",
+    "Lecture terminée"
+  ],
+  "回放已停止": [
+    "Playback stopped",
+    "Lecture arrêtée"
+  ],
+  "回放失败": [
+    "Playback failed",
+    "Échec de la lecture"
+  ],
+  "录像文件": [
+    "Recording file",
+    "Fichier d’enregistrement"
+  ],
+  "打开其他录像": [
+    "Open another recording",
+    "Ouvrir un autre enregistrement"
+  ],
+  "关闭录像": [
+    "Close recording",
+    "Fermer l’enregistrement"
+  ],
+  "回放位置": [
+    "Playback position",
+    "Position de lecture"
+  ],
+  "播放": [
+    "Play",
+    "Lire"
+  ],
+  "暂停": [
+    "Pause",
+    "Pause"
+  ],
+  "从头播放": [
+    "Play from beginning",
+    "Lire depuis le début"
+  ],
+  "停止回放": [
+    "Stop playback",
+    "Arrêter la lecture"
+  ],
+  "录像当前没有视频信号": [
+    "The recording currently has no video signal",
+    "L’enregistrement n’a actuellement aucun signal vidéo"
+  ],
+  "退出前选择下一控制者": [
+    "Choose the next controller before exiting",
+    "Choisir le prochain contrôleur avant de quitter"
+  ],
+  "断开前选择下一控制者": [
+    "Choose the next controller before disconnecting",
+    "Choisir le prochain contrôleur avant déconnexion"
+  ],
+  "选择仍在线的用户接管控制，或直接关闭。": [
+    "Choose an online user to take control, or close directly.",
+    "Choisissez un utilisateur connecté pour prendre le contrôle, ou fermez directement."
+  ],
+  "正在读取共享会话…": [
+    "Reading shared sessions…",
+    "Lecture des sessions partagées…"
+  ],
+  "剩余 {} 秒。到时直接关闭；不会自动将控制权交给所选用户。": [
+    "{} seconds left. Closing when time expires; the selected user will not automatically receive control.",
+    "{} secondes restantes. Fermeture à l’expiration ; l’utilisateur choisi ne recevra pas automatiquement le contrôle."
+  ],
+  "正在结束介质、保存录像并关闭会话，请等待。": [
+    "Stopping media, saving recordings and closing sessions. Please wait.",
+    "Arrêt des médias, enregistrement des vidéos et fermeture des sessions. Patientez."
+  ],
+  "不转交控制权限": [
+    "Do not hand over control",
+    "Ne pas transférer le contrôle"
+  ],
+  "{} · {} · 会话 #{} · {}": [
+    "{} · {} · Session #{} · {}",
+    "{} · {} · Session #{} · {}"
+  ],
+  "转交会结束该会话的活动介质重定向；关闭前保存录像，未同步的文件夹工作镜像保留。": [
+    "Handing over stops that session’s active media. Recordings are saved before closing; unsynced folder images are kept.",
+    "Le transfert arrête les médias actifs de cette session. Les enregistrements sont sauvegardés avant fermeture ; les images de dossiers non synchronisées sont conservées."
+  ],
+  "取消关闭": [
+    "Cancel closing",
+    "Annuler la fermeture"
+  ],
+  "直接关闭": [
+    "Close directly",
+    "Fermer directement"
+  ],
+  "按选择转交并关闭": [
+    "Hand over as selected and close",
+    "Transférer selon la sélection et fermer"
+  ],
+  "界面语言": [
+    "Interface language",
+    "Langue de l’interface"
+  ],
+  "不更改启动设备": [
+    "Do not change boot device",
+    "Ne pas changer le périphérique"
+  ],
+  "PXE 网络启动": [
+    "PXE network boot",
+    "Démarrage réseau PXE"
+  ],
+  "CD/DVD 光驱": [
+    "CD/DVD drive",
+    "Lecteur CD/DVD"
+  ],
+  "硬盘 / USB": [
+    "Hard disk / USB",
+    "Disque dur / USB"
+  ],
+  "BIOS 设置": [
+    "BIOS setup",
+    "Configuration BIOS"
+  ],
+  "读取启动选项": [
+    "Read boot options",
+    "Lire les options de démarrage"
+  ],
+  "应用启动选项": [
+    "Apply boot options",
+    "Appliquer les options de démarrage"
+  ],
+  "确认启动选项": [
+    "Confirm boot options",
+    "Confirmer les options de démarrage"
+  ],
+  "未匹配响应": [
+    "Unmatched response",
+    "Réponse sans correspondance"
+  ],
+  "等待响应": [
+    "Awaiting response",
+    "En attente de réponse"
+  ],
+  "已完成": [
+    "Completed",
+    "Terminé"
+  ],
+  "失败": [
+    "Failed",
+    "Échec"
+  ],
+  "响应超时": [
+    "Response timed out",
+    "Délai de réponse expiré"
+  ],
+  "连接已关闭": [
+    "Connection closed",
+    "Connexion fermée"
+  ],
+  "未匹配": [
+    "Unmatched",
+    "Sans correspondance"
+  ],
+  "超时后收到响应": [
+    "Response received after timeout",
+    "Réponse reçue après expiration"
+  ],
+  "管理员": [
+    "Administrator",
+    "Administrateur"
+  ],
+  "操作员": [
+    "Operator",
+    "Opérateur"
+  ],
+  "用户": [
+    "User",
+    "Utilisateur"
+  ],
+  "专有权限": [
+    "Proprietary privileges",
+    "Droits spécifiques"
+  ],
+  "未知权限": [
+    "Unknown privileges",
+    "Droits inconnus"
+  ],
+  "持有控制权限": [
+    "Control granted",
+    "Contrôle accordé"
+  ],
+  "控制权限已暂停": [
+    "Control suspended",
+    "Contrôle suspendu"
+  ],
+  "访问已拒绝": [
+    "Access denied",
+    "Accès refusé"
+  ],
+  "统一为 1024×768": [
+    "Normalize to 1024×768",
+    "Normaliser en 1024×768"
+  ],
+  "原分辨率，变化时分文件": [
+    "Native resolution; split on changes",
+    "Résolution native ; séparer lors des changements"
+  ],
+  "画面拉伸为 1024×768，记录无信号画面。": [
+    "Stretch to 1024×768 and record a no-signal image.",
+    "Étirer en 1024×768 et enregistrer une image sans signal."
+  ],
+  "保留原分辨率；跳过无信号时间，尺寸变化时保存为新 MP4。": [
+    "Keep native resolution; skip no-signal time and create a new MP4 when dimensions change.",
+    "Conserver la résolution native ; ignorer les périodes sans signal et créer un MP4 lors d’un changement de dimensions."
+  ],
+  "BMC 预览画面": [
+    "BMC preview image",
+    "Aperçu BMC"
+  ],
+  "蓝屏捕获画面": [
+    "Crash capture image",
+    "Capture de panne"
+  ],
+  "选择要重定向的文件夹": [
+    "Choose folder to redirect",
+    "Choisir le dossier à rediriger"
+  ],
+  "选择工作镜像的新文件名": [
+    "Choose a new working image filename",
+    "Choisir le nom de l’image de travail"
+  ],
+  "FAT 工作镜像": [
+    "FAT working image",
+    "Image de travail FAT"
+  ],
+  "CD/DVD 镜像": [
+    "CD/DVD images",
+    "Images CD/DVD"
+  ],
+  "磁盘镜像": [
+    "Disk images",
+    "Images disque"
+  ],
+  "录像": [
+    "Recordings",
+    "Enregistrements"
+  ],
+  "所有文件": [
+    "All files",
+    "Tous les fichiers"
+  ],
+  "界面状态不可用": [
+    "Interface state unavailable",
+    "État de l’interface indisponible"
+  ],
+  "Interface state unavailable": [
+    "Interface state unavailable",
+    "État de l’interface indisponible"
+  ],
+  "Preferences unavailable": [
+    "Preferences unavailable",
+    "Préférences indisponibles"
+  ],
+  "Session not found": [
+    "Session not found",
+    "Session introuvable"
+  ],
+  "组合键存储不可用": [
+    "Key combination store unavailable",
+    "Stockage des combinaisons indisponible"
+  ],
+  "本机键盘状态不可用": [
+    "Host keyboard state unavailable",
+    "État du clavier local indisponible"
+  ],
+  "请选择可用的介质实例": [
+    "Choose an available media instance",
+    "Choisissez une instance de média disponible"
+  ],
+  "所选介质实例已被占用": [
+    "Selected media instance is in use",
+    "L’instance de média choisie est occupée"
+  ],
+  "请先处理当前确认窗口。": [
+    "Resolve the current confirmation first.",
+    "Traitez d’abord la confirmation actuelle."
+  ],
+  "请先处理当前关闭窗口。": [
+    "Resolve the current close dialog first.",
+    "Traitez d’abord la fenêtre de fermeture."
+  ],
+  "正在处理关闭选择，输入暂时停止。": [
+    "Input is paused during close selection.",
+    "La saisie est suspendue pendant le choix de fermeture."
+  ],
+  "确认操作不能嵌套或确认关闭窗口。": [
+    "Confirmations cannot be nested or used to close dialogs.",
+    "Les confirmations ne peuvent pas être imbriquées ni fermer une fenêtre."
+  ],
+  "该确认窗口已经结束。": [
+    "This confirmation has ended.",
+    "Cette confirmation est terminée."
+  ],
+  "REMOTE CONSOLE": [
+    "REMOTE CONSOLE",
+    "CONSOLE DISTANTE"
+  ],
+  "YOUR INFRASTRUCTURE": [
+    "YOUR INFRASTRUCTURE",
+    "VOTRE INFRASTRUCTURE"
+  ],
+  "诊断日志": [
+    "Diagnostic logs",
+    "Journaux de diagnostic"
+  ],
+  "所有类别": [
+    "All categories",
+    "Toutes les catégories"
+  ],
+  "查看连接、设备与操作状态，导出用于排查问题的记录。": [
+    "Inspect connection, device and operation status, and export records for troubleshooting.",
+    "Consultez l’état des connexions, des périphériques et des opérations, puis exportez les journaux pour le diagnostic."
+  ],
+  "停止文件日志": [
+    "Stop file logging",
+    "Arrêter le journal fichier"
+  ],
+  "追加到日志文件": [
+    "Append to a log file",
+    "Ajouter à un fichier journal"
+  ],
+  "记录诊断日志": [
+    "Record diagnostics",
+    "Enregistrer les diagnostics"
+  ],
+  "记录级别": [
+    "Recording level",
+    "Niveau d’enregistrement"
+  ],
+  "同时输出到控制台": [
+    "Also write to console",
+    "Écrire aussi dans la console"
+  ],
+  "调试级别包含报文类型和长度；不记录密码、认证令牌或输入文本。文件日志持续追加，停止或退出时保存。": [
+    "Debug includes packet types and lengths. Passwords, authentication tokens and typed text are excluded. File records are appended and saved on stop or exit.",
+    "Le niveau de débogage inclut le type et la taille des paquets. Les mots de passe, jetons et textes saisis sont exclus. Les fichiers sont complétés et enregistrés à l’arrêt ou à la fermeture."
+  ],
+  "显示级别": [
+    "Display level",
+    "Niveau affiché"
+  ],
+  "类别": [
+    "Category",
+    "Catégorie"
+  ],
+  "搜索日志": [
+    "Search logs",
+    "Rechercher dans les journaux"
+  ],
+  "事件、详情、时间或服务器编号": [
+    "Event, details, time or server ID",
+    "Événement, détails, heure ou identifiant du serveur"
+  ],
+  "筛选": [
+    "Filter",
+    "Filtrer"
+  ],
+  "文件写入队列已跳过 {} 条；内存日志继续保留最近的记录。": [
+    "The file queue skipped {} records. Recent records remain in memory.",
+    "La file d’écriture a ignoré {} entrées. Les entrées récentes restent en mémoire."
+  ],
+  "匹配 {} 条 · 保留最近 {} 条 · 累计 {} 条": [
+    "{} matching · {} recent records retained · {} total",
+    "{} correspondances · {} entrées récentes conservées · {} au total"
+  ],
+  "导出筛选后的日志": [
+    "Export filtered logs",
+    "Exporter les journaux filtrés"
+  ],
+  "清空内存日志": [
+    "Clear memory logs",
+    "Effacer les journaux en mémoire"
+  ],
+  "没有匹配的日志记录。": [
+    "No matching log records.",
+    "Aucune entrée correspondante."
+  ],
+  "上一页": [
+    "Previous page",
+    "Page précédente"
+  ],
+  "下一页": [
+    "Next page",
+    "Page suivante"
+  ],
+  "第 {} / {} 页": [
+    "Page {} / {}",
+    "Page {} / {}"
+  ],
+  "关于 AMIKVM": [
+    "About AMIKVM",
+    "À propos d’AMIKVM"
+  ],
+  "远程控制台与虚拟介质": [
+    "Remote console and virtual media",
+    "Console distante et supports virtuels"
+  ],
+  "应用版本": [
+    "Application version",
+    "Version de l’application"
+  ],
+  "核心版本": [
+    "Core version",
+    "Version du cœur"
+  ],
+  "构建平台": [
+    "Build target",
+    "Plateforme de compilation"
+  ],
+  "Rust 工具链": [
+    "Rust toolchain",
+    "Chaîne Rust"
+  ],
+  "视频解码、输入转换和虚拟介质由 Rust 实现；运行不需要 Java/JVM 或原版 JNI。": [
+    "Video decoding, input conversion and virtual media run in Rust. Java, the JVM and the original JNI libraries are not required.",
+    "Le décodage vidéo, la conversion des entrées et les supports virtuels sont implémentés en Rust. Java, la JVM et les bibliothèques JNI d’origine ne sont pas nécessaires."
+  ],
+  "第三方许可 · fatfs": [
+    "Third-party license · fatfs",
+    "Licence tierce · fatfs"
+  ],
+  "选择追加日志文件": [
+    "Choose a log file to append to",
+    "Choisir un fichier journal à compléter"
+  ],
+  "日志文件": [
+    "Log files",
+    "Fichiers journaux"
+  ],
+  "操作失败": [
+    "Operation failed",
+    "Échec de l’opération"
+  ],
+  "日志设置已改变": [
+    "Logging settings changed",
+    "Paramètres des journaux modifiés"
+  ],
+  "文件日志已停止": [
+    "File logging stopped",
+    "Journal fichier arrêté"
+  ],
+  "文件日志已开始": [
+    "File logging started",
+    "Journal fichier démarré"
+  ],
+  "日志已导出": [
+    "Logs exported",
+    "Journaux exportés"
+  ],
+  "应用已启动": [
+    "Application started",
+    "Application démarrée"
+  ],
+  "应用正在退出": [
+    "Application is exiting",
+    "Fermeture de l’application"
+  ],
+  "调试": [
+    "Debug",
+    "Débogage"
+  ],
+  "信息": [
+    "Info",
+    "Information"
+  ],
+  "警告": [
+    "Warning",
+    "Avertissement"
+  ],
+  "错误": [
+    "Error",
+    "Erreur"
+  ],
+  "会话": [
+    "Session",
+    "Session"
+  ],
+  "协议": [
+    "Protocol",
+    "Protocole"
+  ],
+  "共享权限": [
+    "Sharing permissions",
+    "Droits de partage"
+  ],
+  "录制": [
+    "Recording",
+    "Enregistrement"
+  ],
+  "文件夹": [
+    "Folder",
+    "Dossier"
+  ],
+  "画面捕获": [
+    "Image capture",
+    "Capture d’image"
+  ],
+  "界面": [
+    "Interface",
+    "Interface"
+  ],
+  "介质状态已改变": [
+    "Media status changed",
+    "État du support modifié"
+  ],
+  "会话状态已改变": [
+    "Session status changed",
+    "État de la session modifié"
+  ],
+  "录制状态已改变": [
+    "Recording status changed",
+    "État de l’enregistrement modifié"
+  ],
+  "控制权限已改变": [
+    "Control permissions changed",
+    "Droits de contrôle modifiés"
+  ],
+  "画面状态已改变": [
+    "Video status changed",
+    "État vidéo modifié"
+  ],
+  "键鼠输入状态已改变": [
+    "Keyboard and mouse settings changed",
+    "Paramètres du clavier et de la souris modifiés"
+  ],
+  "画面捕获状态已改变": [
+    "Image capture status changed",
+    "État de la capture modifié"
+  ],
+  "文件夹任务状态已改变": [
+    "Folder task status changed",
+    "État de la tâche de dossier modifié"
+  ],
+  "回放状态已改变": [
+    "Playback status changed",
+    "État de la lecture modifié"
+  ],
+  "BMC 录像任务状态已改变": [
+    "BMC recording task status changed",
+    "État de la tâche d’enregistrement BMC modifié"
+  ],
+  "收到 IVTP 报文": [
+    "IVTP packet received",
+    "Paquet IVTP reçu"
+  ],
+  "IVTP 控制报文已排队": [
+    "IVTP control packet queued",
+    "Paquet de contrôle IVTP mis en file"
+  ],
+  "服务器已保存": [
+    "Server saved",
+    "Serveur enregistré"
+  ],
+  "服务器已删除": [
+    "Server deleted",
+    "Serveur supprimé"
+  ],
+  "键鼠输入失败": [
+    "Keyboard or mouse input failed",
+    "Échec d’une entrée clavier ou souris"
+  ],
+  "IPMI 请求状态已改变": [
+    "IPMI request status changed",
+    "État de la requête IPMI modifié"
+  ],
+  "启动选项状态已改变": [
+    "Boot option status changed",
+    "État des options de démarrage modifié"
+  ],
+  "日志文件正在使用，请选择其他文件。": [
+    "The log file is in use. Choose another file.",
+    "Le fichier journal est utilisé. Choisissez un autre fichier."
+  ],
+  "请停止文件日志后再覆盖该文件。": [
+    "Stop file logging before replacing this file.",
+    "Arrêtez le journal fichier avant de remplacer ce fichier."
+  ],
+  "请输入连接密码": [
+    "Enter the connection password",
+    "Saisissez le mot de passe de connexion"
+  ],
+  "应用正在关闭": [
+    "Application is closing",
+    "L’application se ferme"
+  ],
+  "服务器连接已关闭": [
+    "Server connection closed",
+    "Connexion au serveur fermée"
+  ],
+  "请先连接服务器": [
+    "Connect to the server first",
+    "Connectez-vous d’abord au serveur"
+  ],
+  "请先连接远程控制台": [
+    "Connect to the remote console first",
+    "Connectez-vous d’abord à la console distante"
+  ],
+  "录像已关闭": [
+    "Recording closed",
+    "Enregistrement fermé"
+  ],
+  "回放位置无效": [
+    "Invalid playback position",
+    "Position de lecture invalide"
+  ],
+  "此会话已经在录制": [
+    "This session is already recording",
+    "Cette session est déjà en cours d’enregistrement"
+  ],
+  "录制策略无效": [
+    "Invalid recording policy",
+    "Stratégie d’enregistrement invalide"
+  ],
+  "录制时长须为 1–1800 秒": [
+    "Recording duration must be 1–1800 seconds",
+    "La durée doit être de 1 à 1800 secondes"
+  ],
+  "捕获状态不可用": [
+    "Capture state unavailable",
+    "État de la capture indisponible"
+  ],
+  "捕获画面不可用": [
+    "Captured image unavailable",
+    "Image capturée indisponible"
+  ],
+  "正在抓取 BMC 画面，请等待当前操作结束": [
+    "A BMC image is being captured. Wait for this operation to finish.",
+    "Une capture BMC est en cours. Attendez la fin de cette opération."
+  ],
+  "画面取消状态不可用": [
+    "Capture cancellation state unavailable",
+    "État d’annulation de la capture indisponible"
+  ],
+  "回放状态不可用": [
+    "Playback state unavailable",
+    "État de la lecture indisponible"
+  ],
+  "回放时钟不可用": [
+    "Playback clock unavailable",
+    "Horloge de lecture indisponible"
+  ],
+  "请重新打开录像文件": [
+    "Reopen the recording file",
+    "Rouvrez le fichier d’enregistrement"
+  ],
+  "缺少回放位置": [
+    "Missing playback position",
+    "Position de lecture manquante"
+  ],
+  "未知回放操作": [
+    "Unknown playback operation",
+    "Opération de lecture inconnue"
+  ],
+  "回放位置超出录像长度": [
+    "Playback position exceeds recording duration",
+    "La position dépasse la durée de l’enregistrement"
+  ],
+  "录像长度尚未确定，请等待读取完成": [
+    "Recording duration is not known yet. Wait for reading to finish.",
+    "La durée n’est pas encore connue. Attendez la fin de la lecture du fichier."
+  ],
+  "录像不在当前服务器列表中，请刷新后重试": [
+    "This recording is not in the current server list. Refresh and retry.",
+    "Cet enregistrement ne figure pas dans la liste actuelle. Actualisez et réessayez."
+  ],
+  "录像列表刷新已取消": [
+    "Recording list refresh cancelled",
+    "Actualisation des enregistrements annulée"
+  ],
+  "录像取消状态不可用": [
+    "Recording cancellation state unavailable",
+    "État d’annulation de l’enregistrement indisponible"
+  ],
+  "正在处理 BMC 录像，请等待当前操作结束": [
+    "A BMC recording operation is in progress. Wait for it to finish.",
+    "Une opération sur les enregistrements BMC est en cours. Attendez sa fin."
+  ],
+  "在控制台中，Ctrl+Shift+L 开始或停止文件日志，Ctrl+F1 打开关于窗口。": [
+    "In the console, Ctrl+Shift+L starts or stops file logging; Ctrl+F1 opens About.",
+    "Dans la console, Ctrl+Shift+L démarre ou arrête le journal fichier ; Ctrl+F1 ouvre À propos."
+  ],
+  "应用程序": [
+    "Application",
+    "Application"
+  ]
+}

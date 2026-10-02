@@ -1,0 +1,18 @@
+pub mod auth;
+pub mod diagnostics;
+pub mod error;
+pub mod input;
+pub mod ipmi;
+pub mod media;
+pub mod playback;
+pub mod preferences;
+pub mod protocol;
+pub mod recording;
+pub mod recordings;
+pub mod server;
+pub mod sharing;
+pub mod transport;
+pub mod video;
+
+pub use error::{Error, Result};
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,0 +1,1495 @@
+use amikvm_core::{
+    Error, Result,
+    auth::{SessionConfig, WebSession},
+    input::{self, Event, TextMode},
+    protocol::{self, Control, Fragments},
+    transport,
+    video::{Cursor, Decoder},
+};
+use serde::Serialize;
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+    },
+    time::Duration,
+};
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::{
+    io::AsyncWriteExt,
+    sync::{Mutex as AsyncMutex, mpsc, oneshot, watch},
+};
+use uuid::Uuid;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    pub server_id: Uuid,
+    pub phase: String,
+    pub message: Option<String>,
+    pub config: Option<SessionConfig>,
+    pub power: Option<u16>,
+    pub mouse_mode: Option<u8>,
+    pub mouse: input::mouse::State,
+    pub lock_leds: u8,
+    pub software_keys: Vec<u8>,
+    pub input_encryption: bool,
+    pub encryption_required: bool,
+    pub host_display: Option<u16>,
+    pub ipmi: amikvm_core::ipmi::State,
+    pub can_control: bool,
+    pub frames_received: u64,
+    pub bytes_received: u64,
+    pub video_width: u32,
+    pub video_height: u32,
+    pub video_source_width: u32,
+    pub video_source_height: u32,
+    pub video_signal: bool,
+    pub video_connected: bool,
+    pub web_only: bool,
+    pub video_config: Option<amikvm_core::video::config::EngineConfig>,
+    pub bandwidth: Option<u32>,
+    pub bandwidth_measuring: bool,
+    pub measured_bytes_per_second: Option<u64>,
+    #[serde(skip)]
+    pub bandwidth_requested: Option<std::time::Instant>,
+    pub own_session_id: Option<u8>,
+    pub users: Vec<amikvm_core::sharing::User>,
+    pub sharing: amikvm_core::sharing::State,
+    pub recording: bool,
+    pub recording_paused: bool,
+    pub recording_path: Option<String>,
+    pub recording_elapsed_ms: u64,
+    pub recording_limit_seconds: u16,
+    pub recording_message: Option<String>,
+    pub recording_policy: amikvm_core::recording::Policy,
+    pub recording_outputs: Vec<String>,
+    pub recording_written_ms: u64,
+    pub recording_skipped_ms: u64,
+    pub media: Vec<amikvm_core::media::redirect::Status>,
+}
+
+impl Snapshot {
+    pub fn pending(id: Uuid) -> Self {
+        Self {
+            server_id: id,
+            phase: "authenticating".into(),
+            message: None,
+            config: None,
+            power: None,
+            mouse_mode: None,
+            mouse: input::mouse::State::default(),
+            lock_leds: 0,
+            software_keys: vec![],
+            input_encryption: false,
+            encryption_required: false,
+            host_display: None,
+            ipmi: amikvm_core::ipmi::State::default(),
+            can_control: false,
+            frames_received: 0,
+            bytes_received: 0,
+            video_width: 0,
+            video_height: 0,
+            video_source_width: 0,
+            video_source_height: 0,
+            video_signal: false,
+            video_connected: false,
+            web_only: false,
+            video_config: None,
+            bandwidth: None,
+            bandwidth_measuring: false,
+            measured_bytes_per_second: None,
+            bandwidth_requested: None,
+            own_session_id: None,
+            users: vec![],
+            sharing: amikvm_core::sharing::State::default(),
+            recording: false,
+            recording_paused: false,
+            recording_path: None,
+            recording_elapsed_ms: 0,
+            recording_limit_seconds: 20,
+            recording_message: None,
+            recording_policy: amikvm_core::recording::Policy::default(),
+            recording_outputs: Vec::new(),
+            recording_written_ms: 0,
+            recording_skipped_ms: 0,
+            media: vec![],
+        }
+    }
+}
+
+pub struct Session {
+    pub snapshot: Arc<Mutex<Snapshot>>,
+    pub video: Arc<Mutex<crate::video::Video>>,
+    pub media: Arc<crate::media::Manager>,
+    pub recordings: Arc<crate::recordings::Manager>,
+    pub captures: Arc<crate::captures::Manager>,
+    pub recording_operation: Arc<AsyncMutex<()>>,
+    pub file_dialog: AsyncMutex<()>,
+    video_configuration: AsyncMutex<()>,
+    sender: mpsc::Sender<Outgoing>,
+    ready: Arc<AtomicBool>,
+    keyboard: Arc<AsyncMutex<input::State>>,
+    input_app: AppHandle,
+    cancel: watch::Sender<bool>,
+    finished: watch::Receiver<bool>,
+}
+
+enum Outgoing {
+    Bytes(Vec<u8>),
+    Mouse(crate::mouse::Operation),
+    SharingAnswer(Vec<u8>),
+    Handoff {
+        bytes: Vec<u8>,
+        reply: Option<oneshot::Sender<Result<()>>>,
+    },
+    Hid {
+        mouse: bool,
+        report: Vec<u8>,
+    },
+    Encryption {
+        enabled: bool,
+        requested: bool,
+        reply: Option<oneshot::Sender<Result<()>>>,
+    },
+}
+
+fn update(app: &AppHandle, snapshot: &Arc<Mutex<Snapshot>>, f: impl FnOnce(&mut Snapshot)) {
+    if let Ok(mut value) = snapshot.lock() {
+        f(&mut value);
+        crate::diagnostics::session(&app, &value);
+        let _ = app.emit("session-state", value.clone());
+    }
+}
+
+impl Session {
+    pub async fn start(app: AppHandle, web: WebSession, web_only: bool) -> Result<Self> {
+        let keyboard = Arc::new(AsyncMutex::new(input::State::default()));
+        let sequence = Arc::new(AtomicU32::new(0));
+        let input_app = app.clone();
+        let web = Arc::new(web);
+        if web_only || web.config.privileges & 1 == 0 || !web.config.kvm_enabled {
+            if !web_only && web.config.privileges & 2 == 0 {
+                let _ = web.logout().await;
+                return Err(Error::Authentication(
+                    "This account has no KVM or virtual media privilege".into(),
+                ));
+            }
+            let mut initial = Snapshot::pending(web.server.id);
+            initial.phase = "connected".into();
+            initial.web_only = web_only;
+            initial.message = Some(
+                if web_only {
+                    "Web 会话已连接，可抓取 BMC 画面"
+                } else {
+                    "虚拟介质会话已连接；KVM 不可用"
+                }
+                .into(),
+            );
+            initial.config = Some(web.config.clone());
+            let snapshot = Arc::new(Mutex::new(initial));
+            let (cancel, mut cancel_rx) = watch::channel(false);
+            let (finish_tx, finished) = watch::channel(false);
+            let media = Arc::new(crate::media::Manager::new(
+                web.clone(),
+                snapshot.clone(),
+                app.clone(),
+                cancel_rx.clone(),
+            ));
+            let worker_media = media.clone();
+            let recordings = Arc::new(crate::recordings::Manager::new(web.clone(), app.clone()));
+            let worker_recordings = recordings.clone();
+            let captures = Arc::new(crate::captures::Manager::new(web.clone(), app.clone()));
+            let worker_captures = captures.clone();
+            let worker_snapshot = snapshot.clone();
+            let (sender, _receiver) = mpsc::channel(1);
+            tauri::async_runtime::spawn(async move {
+                update(&app, &worker_snapshot, |_| {});
+                let _ = cancel_rx.changed().await;
+                worker_media.stop_all().await;
+                worker_recordings.shutdown().await;
+                worker_captures.shutdown().await;
+                update(&app, &worker_snapshot, |s| s.phase = "disconnected".into());
+                let _ = tokio::time::timeout(Duration::from_secs(2), web.logout()).await;
+                let _ = finish_tx.send(true);
+            });
+            return Ok(Self {
+                snapshot,
+                video: Arc::new(Mutex::new(crate::video::Video::default())),
+                media,
+                recordings,
+                captures,
+                recording_operation: Arc::new(AsyncMutex::new(())),
+                file_dialog: AsyncMutex::new(()),
+                video_configuration: AsyncMutex::new(()),
+                sender,
+                ready: Arc::new(AtomicBool::new(false)),
+                keyboard,
+                input_app,
+                cancel,
+                finished,
+            });
+        }
+        let connection = match web.open_video().await {
+            Ok(connection) => connection,
+            Err(error) => {
+                let _ = web.logout().await;
+                return Err(error);
+            }
+        };
+        let mut initial = Snapshot::pending(web.server.id);
+        initial.phase = "negotiating".into();
+        if let Ok(ui) = app.state::<crate::commands::AppState>().ui.lock() {
+            if let Some(settings) = ui.mouse_settings.get(&web.server.id) {
+                initial.mouse.settings = *settings;
+            }
+        }
+        initial.config = Some(web.config.clone());
+        let snapshot = Arc::new(Mutex::new(initial));
+        let video = Arc::new(Mutex::new(crate::video::Video::default()));
+        let worker_video = video.clone();
+        let (sender, mut receiver) = mpsc::channel::<Outgoing>(128);
+        let ready = Arc::new(AtomicBool::new(false));
+        let worker_ready = ready.clone();
+        let worker_snapshot = snapshot.clone();
+        let (mut reader, mut writer) = tokio::io::split(connection.stream);
+        let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
+        let (cancel, mut cancel_rx) = watch::channel(false);
+        let media = Arc::new(crate::media::Manager::new(
+            web.clone(),
+            snapshot.clone(),
+            app.clone(),
+            cancel_rx.clone(),
+        ));
+        let worker_media = media.clone();
+        let recordings = Arc::new(crate::recordings::Manager::new(web.clone(), app.clone()));
+        let worker_recordings = recordings.clone();
+        let captures = Arc::new(crate::captures::Manager::new(web.clone(), app.clone()));
+        let worker_captures = captures.clone();
+        let worker_cancel = cancel.clone();
+        let recording_operation = Arc::new(AsyncMutex::new(()));
+        let worker_recording_operation = recording_operation.clone();
+        let (finish_tx, finished) = watch::channel(false);
+        let writer_cancel = cancel.clone();
+        let writer_sequence = sequence.clone();
+        let writer_snapshot = snapshot.clone();
+        let writer_web = web.clone();
+        let writer_app = app.clone();
+        let writer_media = media.clone();
+        let writer_video = video.clone();
+        let writer_keyboard = keyboard.clone();
+        let writer_task = tauri::async_runtime::spawn(async move {
+            let mut heartbeat = tokio::time::interval(Duration::from_secs(1));
+            let mut mouse_clock = tokio::time::interval(Duration::from_millis(25));
+            let mut had_input = false;
+            let mut mouse_length = 6;
+            let mut cipher = None;
+            let result = 'writer: loop {
+                tokio::select! {
+                    _ = &mut stop_rx => break Ok(()),
+                    _ = mouse_clock.tick() => {
+                        let reports = crate::mouse::tick(&writer_app, &writer_snapshot, &writer_video);
+                        if !reports.is_empty() {
+                            match crate::mouse::write(&mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &reports).await {
+                                Ok(written) => { had_input |= written.sent; mouse_length = 4; },
+                                Err(error) => break Err(error),
+                            }
+                        }
+                    },
+                    outgoing = receiver.recv() => match outgoing {
+                        Some(Outgoing::Mouse(operation)) => {
+                            let (effect, reply) = crate::mouse::process(&writer_app, &writer_snapshot, operation);
+                            let effect = match effect {
+                                Ok(effect) => effect,
+                                Err(error) => {
+                                    if let Some(reply) = reply { let _ = reply.send(Err(error)); }
+                                    else { crate::mouse::message(&writer_app, &writer_snapshot, error.to_string()); }
+                                    continue;
+                                }
+                            };
+                            if effect.release_keyboard && writer_snapshot.lock().is_ok_and(|s| s.can_control && s.video_connected) {
+                                writer_keyboard.lock().await.clear();
+                                let release = match protocol::input_report_with_cipher(writer_sequence.fetch_add(1, Ordering::Relaxed), false, &[0; 8], cipher.as_ref()) {
+                                    Ok(bytes) => bytes, Err(error) => break Err(error),
+                                };
+                                if let Err(error) = transport::write_packet(&mut writer, &release).await { break Err(error); }
+                            }
+                            let result = crate::mouse::write(&mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &effect.reports).await;
+                            crate::mouse::display(&writer_app, &writer_snapshot, &writer_video);
+                            if effect.notify { crate::mouse::notify(&writer_app, &writer_snapshot); }
+                            match result {
+                                Ok(written) => {
+                                    had_input |= written.sent;
+                                    if let Some(report) = effect.reports.last() { mouse_length = report.len(); }
+                                    if let Some(reply) = reply {
+                                        let result = if written.complete { Ok(()) } else { Err(Error::Invalid("鼠标模式或控制权限变化，操作未完整写出".into())) };
+                                        let _ = reply.send(result);
+                                    }
+                                },
+                                Err(error) => {
+                                    if let Some(reply) = reply { let _ = reply.send(Err(Error::Protocol(error.to_string()))); }
+                                    break Err(error);
+                                },
+                            }
+                        },
+                        Some(Outgoing::Bytes(bytes)) => {
+                            if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                        },
+                        Some(Outgoing::SharingAnswer(bytes)) => {
+                            if !writer_snapshot.lock().is_ok_and(|s| s.sharing.can_control()) { continue; }
+                            if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                        },
+                        Some(Outgoing::Handoff { bytes, reply }) => {
+                            if !writer_snapshot.lock().is_ok_and(|s| s.sharing.role == amikvm_core::sharing::Role::Master && s.sharing.handoff.is_some()) {
+                                if let Some(reply) = reply { let _ = reply.send(Err(Error::Invalid("Control transfer was cancelled".into()))); }
+                                continue;
+                            }
+                            // Release held input while we still own BMC control, before
+                            // sending the transfer. Local input is already disabled.
+                            if had_input {
+                                for (mouse, report) in [(false, vec![0; 8]), (true, vec![0; mouse_length])] {
+                                    let release = match protocol::input_report_with_cipher(
+                                        writer_sequence.fetch_add(1, Ordering::Relaxed), mouse, &report, cipher.as_ref()
+                                    ) { Ok(bytes) => bytes, Err(error) => break 'writer Err(error) };
+                                    if let Err(error) = transport::write_packet(&mut writer, &release).await { break 'writer Err(error); }
+                                }
+                                had_input = false;
+                            }
+                            writer_media.stop_active().await;
+                            if !writer_snapshot.lock().is_ok_and(|s| s.sharing.role == amikvm_core::sharing::Role::Master && s.sharing.handoff.is_some()) {
+                                if let Some(reply) = reply { let _ = reply.send(Err(Error::Invalid("Control permission changed before transfer".into()))); }
+                                continue;
+                            }
+                            if let Err(error) = transport::write_packet(&mut writer, &bytes).await {
+                                if let Some(reply) = reply { let _ = reply.send(Err(Error::Protocol(error.to_string()))); }
+                                break Err(error);
+                            }
+                            if let Some(reply) = reply { let _ = reply.send(Ok(())); }
+                        },
+                        Some(Outgoing::Hid { mouse, report }) => {
+                            // A report queued before a BMC permission change must not
+                            // reach the host after another session acquires control.
+                            if !writer_snapshot.lock().is_ok_and(|s| s.can_control) { continue; }
+                            if !mouse && report.iter().any(|v| *v != 0)
+                                && writer_snapshot.lock().is_ok_and(|s| s.mouse.active()) { continue; }
+                            let bytes = match protocol::input_report_with_cipher(writer_sequence.fetch_add(1, Ordering::Relaxed), mouse, &report, cipher.as_ref()) {
+                                Ok(bytes) => bytes,
+                                Err(error) => break Err(error),
+                            };
+                            if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                            had_input = true;
+                            if mouse { mouse_length = report.len(); }
+                        },
+                        Some(Outgoing::Encryption { enabled, requested, reply }) => {
+                            let replacement = if enabled { writer_web.input_cipher().map(Some) } else { Ok(None) };
+                            let replacement = match replacement {
+                                Ok(cipher) => cipher,
+                                Err(error) => {
+                                    // A rejected local request keeps the existing mode. A BMC
+                                    // requirement cannot fall back to clear input.
+                                    if let Some(reply) = reply { let _ = reply.send(Err(error)); continue; }
+                                    break Err(error);
+                                }
+                            };
+                            if requested {
+                                let bytes = Control::InputEncryption { enabled }.encode().expect("encryption command");
+                                if let Err(error) = transport::write_packet(&mut writer, &bytes).await {
+                                    if let Some(reply) = reply { let _ = reply.send(Err(Error::Protocol(error.to_string()))); }
+                                    break Err(error);
+                                }
+                            }
+                            cipher = replacement;
+                            update(&writer_app, &writer_snapshot, |s| {
+                                s.input_encryption = enabled;
+                                s.encryption_required = enabled && !requested;
+                            });
+                            if let Some(reply) = reply { let _ = reply.send(Ok(())); }
+                        },
+                        None => break Ok(()),
+                    },
+                    _ = heartbeat.tick(), if worker_ready.load(Ordering::Acquire) => {
+                        if let Err(error) = transport::write_packet(&mut writer, &protocol::command(57, 0)).await { break Err(error); }
+                    }
+                }
+            };
+            let _ = tokio::time::timeout(Duration::from_secs(2), async {
+                if result.is_ok() {
+                    if had_input && writer_snapshot.lock().is_ok_and(|s| s.can_control) {
+                        for (mouse, report) in [(false, vec![0; 8]), (true, vec![0; mouse_length])]
+                        {
+                            if let Ok(bytes) = protocol::input_report_with_cipher(
+                                writer_sequence.fetch_add(1, Ordering::Relaxed),
+                                mouse,
+                                &report,
+                                cipher.as_ref(),
+                            ) {
+                                let _ = writer.write_all(&bytes).await;
+                            }
+                        }
+                    }
+                    let _ = writer.write_all(&protocol::command(8, 0)).await;
+                }
+                let _ = writer.shutdown().await;
+            })
+            .await;
+            let _ = writer_cancel.send(true);
+            result
+        });
+        let worker_sender = sender.clone();
+        let worker_ready = ready.clone();
+        let worker_keyboard = keyboard.clone();
+        tauri::async_runtime::spawn(async move {
+            update(&app, &worker_snapshot, |_| {});
+            let mut fragments = Fragments::default();
+            let mut approved = false;
+            let mut authentication_sent = false;
+            let mut first_client = false;
+            let mut decoder = Decoder::default();
+            let mut cursor = Cursor::default();
+            let mut last_video_state = std::time::Instant::now();
+            let result: Result<()> = async {
+                let mut state_clock = tokio::time::interval(Duration::from_secs(1));
+                'packets: loop {
+                    // Timer ticks must not drop a partially read IVTP header/body.
+                    let packet_future = transport::read_packet(&mut reader);
+                    tokio::pin!(packet_future);
+                    let read = loop {
+                        tokio::select! {
+                            _ = cancel_rx.changed() => break 'packets,
+                            _ = state_clock.tick() => {
+                                if let Ok(mut snapshot) = worker_snapshot.lock() {
+                                    let now = std::time::Instant::now();
+                                    let ipmi_changed = snapshot.ipmi.expire(now);
+                                    let sharing_changed = snapshot.sharing.expire(now);
+                                    snapshot.can_control = snapshot.sharing.can_control();
+                                    if ipmi_changed || sharing_changed {
+                                        crate::diagnostics::session(&app, &snapshot);
+                                        let _ = app.emit("session-state", snapshot.clone());
+                                    }
+                                }
+                            }
+                            read = &mut packet_future => break read,
+                        }
+                    };
+                    let packet = read?;
+                    let stale_measurement = worker_snapshot.lock().is_ok_and(|s| {
+                        packet.header.kind != 17
+                            && s.bandwidth_requested
+                                .is_some_and(|t| t.elapsed() >= Duration::from_secs(30))
+                    });
+                    if stale_measurement {
+                        update(&app, &worker_snapshot, |s| {
+                            s.bandwidth_measuring = false;
+                            s.bandwidth_requested = None;
+                            s.message = Some("服务器未开始带宽测量，可以重试".into());
+                        });
+                    }
+                    let header = packet.header;
+                    let body = packet.body;
+                    crate::diagnostics::record(
+                        &app,
+                        amikvm_core::diagnostics::Level::Debug,
+                        amikvm_core::diagnostics::Category::Protocol,
+                        Some(web.server.id),
+                        "收到 IVTP 报文",
+                        format!(
+                            "kind={} status={} bytes={}",
+                            header.kind,
+                            header.status,
+                            body.len()
+                        ),
+                    );
+                    if let Ok(mut snapshot) = worker_snapshot.lock() {
+                        snapshot.bytes_received += packet.wire_bytes;
+                    }
+                    match header.kind {
+                        8 => {
+                            update(&app, &worker_snapshot, |s| {
+                                s.phase = "disconnected".into();
+                                s.message =
+                                    Some(format!("BMC terminated session ({})", header.status));
+                            });
+                            break;
+                        }
+                        22 => {
+                            return Err(Error::Authentication(
+                                "BMC session limit reached or access denied".into(),
+                            ));
+                        }
+                        23 if !authentication_sent => {
+                            first_client = body.is_empty();
+                            if header.status != 0 && header.status != 2 {
+                                return Err(Error::Protocol(
+                                    "BMC uses a different video SoC".into(),
+                                ));
+                            }
+                            let hostname = hostname::get()
+                                .map(|s| s.to_string_lossy().into_owned())
+                                .unwrap_or_else(|_| "AMIKVM".into());
+                            let mac = mac_address::get_mac_address()
+                                .ok()
+                                .flatten()
+                                .map(|m| m.to_string().replace(':', "-"))
+                                .unwrap_or_default();
+                            let auth = web.authentication_packet(
+                                &connection.local_address.ip().to_string(),
+                                &hostname,
+                                &mac,
+                            )?;
+                            if web.config.oem_features & 32 != 0 {
+                                worker_sender
+                                    .send(Outgoing::Bytes(protocol::command(58, 0)))
+                                    .await
+                                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            }
+                            worker_sender
+                                .send(Outgoing::Bytes(auth))
+                                .await
+                                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            worker_sender
+                                .send(Outgoing::Bytes(protocol::command(6, 0)))
+                                .await
+                                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            worker_sender
+                                .send(Outgoing::Bytes(protocol::command(128, 0)))
+                                .await
+                                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            authentication_sent = true;
+                        }
+                        19 => {
+                            if body.first() != Some(&1) {
+                                return Err(Error::Authentication(format!(
+                                    "Video session rejected ({})",
+                                    body.first().copied().unwrap_or(0)
+                                )));
+                            }
+                            approved = true;
+                            worker_ready.store(true, Ordering::Release);
+                            for bytes in [
+                                web.cookie_packet()?,
+                                protocol::command(34, 0),
+                                protocol::packet(51, 0, &[2])?,
+                                protocol::command(40, 0),
+                                protocol::command(39, 0),
+                                protocol::command(11, 1),
+                            ] {
+                                worker_sender
+                                    .send(Outgoing::Bytes(bytes))
+                                    .await
+                                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            }
+                            update(&app, &worker_snapshot, |s| {
+                                s.phase = "connected".into();
+                                s.video_connected = true;
+                                s.sharing.authenticated(first_client);
+                                s.can_control = s.sharing.can_control();
+                                s.own_session_id = body.get(1).copied();
+                            });
+                        }
+                        9 => {
+                            if let Ok(mut video) = worker_video.lock() {
+                                video.no_signal();
+                            }
+                            update(&app, &worker_snapshot, |s| {
+                                s.message = Some("No video signal".into());
+                                s.video_signal = false;
+                            });
+                        }
+                        25 if approved => {
+                            if let Some(frame) = fragments.push(&body)? {
+                                if decoder.decode(&frame)? {
+                                    if let Ok(mut video) = worker_video.lock() {
+                                        video.publish(&decoder, &cursor);
+                                    }
+                                    let mut notify = false;
+                                    if let Ok(mut s) = worker_snapshot.lock() {
+                                        notify = !s.video_signal
+                                            || s.video_width != decoder.width
+                                            || s.video_height != decoder.height
+                                            || s.video_source_width != decoder.source_width
+                                            || s.video_source_height != decoder.source_height;
+                                        s.frames_received += 1;
+                                        s.video_width = decoder.width;
+                                        s.video_height = decoder.height;
+                                        s.video_source_width = decoder.source_width;
+                                        s.video_source_height = decoder.source_height;
+                                        s.video_signal = true;
+                                        s.message = None;
+                                    }
+                                    if notify
+                                        || last_video_state.elapsed() >= Duration::from_millis(500)
+                                    {
+                                        update(&app, &worker_snapshot, |_| {});
+                                        last_video_state = std::time::Instant::now();
+                                    }
+                                }
+                            }
+                        }
+                        4098 if approved => {
+                            cursor.update(&body)?;
+                            if decoder.width > 0 {
+                                if let Ok(mut video) = worker_video.lock() {
+                                    video.update_cursor(&decoder, &cursor);
+                                }
+                            }
+                        }
+                        4099 if approved => {
+                            let config = amikvm_core::video::config::EngineConfig::parse(&body)?;
+                            update(&app, &worker_snapshot, |s| s.video_config = Some(config));
+                        }
+                        17 if approved => {
+                            let measurement = packet.bandwidth.ok_or_else(|| {
+                                Error::Protocol("Missing bandwidth measurement".into())
+                            })?;
+                            let bandwidth = measurement.preset();
+                            worker_sender
+                                .send(Outgoing::Bytes(
+                                    Control::Bandwidth {
+                                        bytes_per_second: bandwidth,
+                                    }
+                                    .encode()?,
+                                ))
+                                .await
+                                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            update(&app, &worker_snapshot, |s| {
+                                s.bandwidth = Some(bandwidth);
+                                s.bandwidth_measuring = false;
+                                s.bandwidth_requested = None;
+                                s.measured_bytes_per_second =
+                                    Some(measurement.bytes_per_second() as u64);
+                            });
+                        }
+                        10 => update(&app, &worker_snapshot, |s| {
+                            s.mouse_mode = body.first().copied()
+                        }),
+                        20 => update(&app, &worker_snapshot, |s| {
+                            s.lock_leds = body.first().copied().unwrap_or(0)
+                        }),
+                        14 | 15 => {
+                            worker_sender
+                                .send(Outgoing::Encryption {
+                                    enabled: true,
+                                    requested: false,
+                                    reply: None,
+                                })
+                                .await
+                                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                        }
+                        32 | 33 | 50 => {
+                            let effect = {
+                                let mut snapshot = worker_snapshot
+                                    .lock()
+                                    .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                let effect = snapshot.sharing.receive(
+                                    header.kind,
+                                    header.status,
+                                    &body,
+                                    std::time::Instant::now(),
+                                )?;
+                                snapshot.can_control = snapshot.sharing.can_control();
+                                if effect.close {
+                                    snapshot.message = snapshot.sharing.message.clone();
+                                }
+                                crate::diagnostics::session(&app, &snapshot);
+                                let _ = app.emit("session-state", snapshot.clone());
+                                effect
+                            };
+                            if worker_snapshot.lock().is_ok_and(|s| !s.can_control) {
+                                worker_keyboard.lock().await.clear();
+                                update(&app, &worker_snapshot, |s| s.software_keys.clear());
+                            }
+                            if effect.lost_control {
+                                worker_media.stop_active().await;
+                            }
+                            if let Some(reply) = effect.reply {
+                                worker_sender
+                                    .send(Outgoing::SharingAnswer(reply))
+                                    .await
+                                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            }
+                            if effect.close {
+                                break;
+                            }
+                            if effect.gained_control {
+                                for kind in [40, 20] {
+                                    worker_sender
+                                        .send(Outgoing::Bytes(protocol::command(kind, 0)))
+                                        .await
+                                        .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                                }
+                            }
+                            worker_sender
+                                .send(Outgoing::Bytes(protocol::command(39, 0)))
+                                .await
+                                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                        }
+                        39 => {
+                            let users = amikvm_core::sharing::users(&body)?;
+                            update(&app, &worker_snapshot, |s| s.users = users);
+                        }
+                        34 if header.status != 100 => {
+                            update(&app, &worker_snapshot, |s| s.power = Some(header.status))
+                        }
+                        52 => update(&app, &worker_snapshot, |s| {
+                            s.host_display = Some(header.status)
+                        }),
+                        49 => {
+                            let follow_up = if let Ok(mut snapshot) = worker_snapshot.lock() {
+                                let next = match amikvm_core::ipmi::Response::parse(
+                                    header.status,
+                                    &body,
+                                ) {
+                                    Ok(response) => {
+                                        snapshot.ipmi.receive(response, std::time::Instant::now())
+                                    }
+                                    Err(error) => {
+                                        snapshot.ipmi.response_error = Some(error.to_string());
+                                        None
+                                    }
+                                };
+                                crate::diagnostics::session(&app, &snapshot);
+                                let _ = app.emit("session-state", snapshot.clone());
+                                next
+                            } else {
+                                None
+                            };
+                            if let Some(request) = follow_up {
+                                worker_sender
+                                    .send(Outgoing::Bytes(request.encode()?))
+                                    .await
+                                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(())
+            }
+            .await;
+            worker_ready.store(false, Ordering::Release);
+            worker_keyboard.lock().await.clear();
+            update(&app, &worker_snapshot, |s| {
+                s.software_keys.clear();
+                s.ipmi.close();
+            });
+            let _ = worker_cancel.send(true);
+            worker_media.stop_all().await;
+            worker_recordings.shutdown().await;
+            worker_captures.shutdown().await;
+            let recording_guard = worker_recording_operation.lock().await;
+            let recording = worker_video
+                .lock()
+                .ok()
+                .and_then(|mut v| v.recording.take());
+            if let Some(recording) = recording {
+                let _ = tauri::async_runtime::spawn_blocking(move || recording.finish()).await;
+            }
+            if let Ok(mut video) = worker_video.lock() {
+                video.close();
+            }
+            drop(recording_guard);
+            let _ = stop_tx.send(());
+            let writer_result = writer_task.await;
+            let result = result.and_then(|_| match writer_result {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(e)) => Err(e.into()),
+                Err(e) => Err(Error::Protocol(e.to_string())),
+            });
+            if let Err(error) = result {
+                update(&app, &worker_snapshot, |s| {
+                    s.phase = "error".into();
+                    s.sharing.close();
+                    s.message = Some(error.to_string());
+                    s.can_control = false;
+                    s.video_connected = false;
+                    s.bandwidth_measuring = false;
+                    s.bandwidth_requested = None;
+                });
+            } else {
+                update(&app, &worker_snapshot, |s| {
+                    s.phase = "disconnected".into();
+                    s.sharing.close();
+                    s.can_control = false;
+                    s.video_connected = false;
+                    s.bandwidth_measuring = false;
+                    s.bandwidth_requested = None;
+                });
+            }
+            let _ = tokio::time::timeout(Duration::from_secs(2), web.logout()).await;
+            let _ = finish_tx.send(true);
+        });
+        Ok(Self {
+            snapshot,
+            video,
+            media,
+            recordings,
+            captures,
+            recording_operation,
+            file_dialog: AsyncMutex::new(()),
+            video_configuration: AsyncMutex::new(()),
+            sender,
+            ready,
+            keyboard,
+            input_app,
+            cancel,
+            finished,
+        })
+    }
+
+    pub async fn control(&self, control: Control) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        // All desktop requests use the same allocator, including direct IPC calls.
+        // A caller-supplied identifier cannot collide with the OEM boot operation.
+        if let Control::Ipmi { command, .. } = &control {
+            return self.send_ipmi(command.clone()).await;
+        }
+        if matches!(control, Control::RequestControl) {
+            let permit = self
+                .sender
+                .reserve()
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            let mut snapshot = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            if !self.ready.load(Ordering::Acquire) {
+                return Err(Error::Invalid("Session is not connected".into()));
+            }
+            let bytes = snapshot
+                .sharing
+                .request_control(std::time::Instant::now())?;
+            permit.send(Outgoing::Bytes(bytes));
+            crate::diagnostics::session(&self.input_app, &snapshot);
+            let _ = self.input_app.emit("session-state", snapshot.clone());
+            return Ok(());
+        }
+        if matches!(control, Control::Power { .. })
+            && !self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .config
+                .as_ref()
+                .is_some_and(|c| c.privileges & 256 != 0)
+        {
+            return Err(Error::Authentication(
+                "This account has no server power privilege".into(),
+            ));
+        }
+        if !matches!(
+            control,
+            Control::Pause
+                | Control::Resume
+                | Control::Refresh
+                | Control::PowerStatus
+                | Control::Bandwidth { .. }
+                | Control::DetectBandwidth
+                | Control::ActiveUsers
+                | Control::RequestControl
+        ) && !self
+            .snapshot
+            .lock()
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?
+            .can_control
+        {
+            return Err(Error::Authentication(
+                "Session has view-only permissions".into(),
+            ));
+        }
+        if let Control::InputEncryption { enabled } = control {
+            self.input(Event::ReleaseAll).await?;
+            let (reply, result) = oneshot::channel();
+            self.sender
+                .send(Outgoing::Encryption {
+                    enabled,
+                    requested: true,
+                    reply: Some(reply),
+                })
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            return result
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+        }
+        let bytes = control.encode()?;
+        let packet_kind = u16::from_le_bytes([bytes[0], bytes[1]]);
+        let packet_length = bytes.len();
+        if matches!(control, Control::MouseMode { .. }) {
+            self.input(Event::Release).await?;
+        }
+        // A new software layout must not carry latched keys from the old layout.
+        if matches!(control, Control::KeyboardLayout { .. }) {
+            self.release_software().await?;
+        }
+        let detecting = matches!(control, Control::DetectBandwidth);
+        if matches!(
+            control,
+            Control::DetectBandwidth | Control::Bandwidth { .. }
+        ) {
+            let mut snapshot = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            if snapshot.bandwidth_measuring {
+                return Err(Error::Invalid(
+                    "Bandwidth measurement is already running".into(),
+                ));
+            }
+            if detecting {
+                snapshot.bandwidth_measuring = true;
+                snapshot.bandwidth_requested = Some(std::time::Instant::now());
+            }
+        }
+        let result = self
+            .sender
+            .send(Outgoing::Bytes(bytes))
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()));
+        if let Ok(mut snapshot) = self.snapshot.lock() {
+            if result.is_err() && detecting {
+                snapshot.bandwidth_measuring = false;
+                snapshot.bandwidth_requested = None;
+            }
+            if result.is_ok() {
+                crate::diagnostics::record(
+                    &self.input_app,
+                    amikvm_core::diagnostics::Level::Debug,
+                    amikvm_core::diagnostics::Category::Protocol,
+                    Some(snapshot.server_id),
+                    "IVTP 控制报文已排队",
+                    format!("kind={packet_kind}, bytes={packet_length}"),
+                );
+                match &control {
+                    Control::Bandwidth { bytes_per_second } => {
+                        snapshot.bandwidth = Some(*bytes_per_second)
+                    }
+                    Control::KeyboardLayout { layout } => {
+                        if let Some(config) = snapshot.config.as_mut() {
+                            config.keyboard_layout.clone_from(layout);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        result
+    }
+
+    async fn dispatch_ipmi(
+        &self,
+        build: impl FnOnce(
+            &mut amikvm_core::ipmi::State,
+            std::time::Instant,
+        ) -> Result<amikvm_core::ipmi::Request>
+        + Send,
+    ) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        let request = {
+            let mut snapshot = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            if !snapshot.can_control {
+                return Err(Error::Authentication(
+                    "Session has view-only permissions".into(),
+                ));
+            }
+            let request = build(&mut snapshot.ipmi, std::time::Instant::now())?;
+            crate::diagnostics::session(&self.input_app, &snapshot);
+            let _ = self.input_app.emit("session-state", snapshot.clone());
+            request
+        };
+        let result = async {
+            self.sender
+                .send(Outgoing::Bytes(request.encode()?))
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))
+        }
+        .await;
+        if let Err(error) = &result {
+            update(&self.input_app, &self.snapshot, |snapshot| {
+                snapshot.ipmi.send_failed(&request, error.to_string())
+            });
+        }
+        result
+    }
+    pub async fn send_ipmi(&self, command: Vec<u8>) -> Result<()> {
+        self.dispatch_ipmi(move |state, now| state.begin_raw(command, now))
+            .await
+    }
+    pub async fn read_boot(&self) -> Result<()> {
+        self.dispatch_ipmi(|state, now| state.begin_boot_read(now))
+            .await
+    }
+    pub async fn apply_boot(
+        &self,
+        device: amikvm_core::ipmi::BootDevice,
+        next_boot_only: bool,
+    ) -> Result<()> {
+        self.dispatch_ipmi(move |state, now| state.begin_boot_write(device, next_boot_only, now))
+            .await
+    }
+    pub fn clear_ipmi_history(&self) {
+        update(&self.input_app, &self.snapshot, |snapshot| {
+            snapshot.ipmi.clear_completed()
+        });
+    }
+
+    pub async fn configure_video(
+        &self,
+        setting: amikvm_core::video::config::Setting,
+    ) -> Result<()> {
+        let _operation = self.video_configuration.lock().await;
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        let config = {
+            let snapshot = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            if !snapshot.can_control {
+                return Err(Error::Authentication(
+                    "Control permission is required".into(),
+                ));
+            }
+            snapshot
+                .video_config
+                .ok_or_else(|| Error::Invalid("Waiting for BMC video configuration".into()))?
+        }
+        .change(setting)?;
+        self.sender
+            .send(Outgoing::Bytes(config.packet()?))
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))?;
+        self.snapshot
+            .lock()
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?
+            .video_config = Some(config);
+        Ok(())
+    }
+    pub fn can_record(&self) -> bool {
+        self.ready.load(Ordering::Acquire)
+    }
+
+    pub fn sharing_policy(&self, policy: amikvm_core::sharing::Policy) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        let mut snapshot = self
+            .snapshot
+            .lock()
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+        snapshot.sharing.set_policy(policy)?;
+        crate::diagnostics::session(&self.input_app, &snapshot);
+        let _ = self.input_app.emit("session-state", snapshot.clone());
+        Ok(())
+    }
+
+    pub async fn share(
+        &self,
+        operation: &str,
+        user_id: u8,
+        request_token: Option<Uuid>,
+        identity: Option<amikvm_core::sharing::Identity>,
+    ) -> Result<()> {
+        self.share_inner(operation, user_id, request_token, identity, None)
+            .await
+    }
+
+    pub async fn transfer_on_exit(&self, user: amikvm_core::sharing::User) -> Result<()> {
+        let (reply, written) = oneshot::channel();
+        // Queue backpressure is part of the write deadline, too. Shutdown must
+        // not wait indefinitely for capacity before it starts waiting for ACK.
+        tokio::time::timeout(Duration::from_secs(20), async {
+            self.share_inner(
+                "transfer",
+                user.id,
+                None,
+                Some(user.identity()),
+                Some(reply),
+            )
+            .await?;
+            written.await.map_err(|_| {
+                Error::Protocol("Connection closed before transfer was written".into())
+            })?
+        })
+        .await
+        .map_err(|_| Error::Timeout("Control transfer write"))?
+    }
+
+    async fn share_inner(
+        &self,
+        operation: &str,
+        user_id: u8,
+        request_token: Option<Uuid>,
+        identity: Option<amikvm_core::sharing::Identity>,
+        handoff_reply: Option<oneshot::Sender<Result<()>>>,
+    ) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        // Reserve queue capacity before validating/updating the request. No await
+        // separates deadline validation from queueing an answer or transfer.
+        let permit = self
+            .sender
+            .reserve()
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))?;
+        let handoff = matches!(operation, "grant" | "transfer");
+        {
+            let mut snapshot = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            if !snapshot.can_control {
+                return Err(Error::Authentication(
+                    "Control permission is required".into(),
+                ));
+            }
+            if snapshot.own_session_id == Some(user_id) {
+                return Err(Error::Invalid(
+                    "Cannot transfer or remove this session".into(),
+                ));
+            }
+            let bytes = match operation {
+                "grant" | "partial" | "deny" | "block_partial" | "block_deny" => {
+                    let token = request_token
+                        .ok_or_else(|| Error::Invalid("缺少当前权限申请编号".into()))?;
+                    snapshot
+                        .sharing
+                        .decide(token, user_id, operation, std::time::Instant::now())?
+                }
+                "transfer" | "disconnect" => {
+                    let user = snapshot
+                        .users
+                        .iter()
+                        .find(|u| u.id == user_id && identity.as_ref() == Some(&u.identity()))
+                        .ok_or_else(|| Error::Invalid("User session no longer exists".into()))?;
+                    if operation == "transfer" {
+                        let user = user.clone();
+                        snapshot.sharing.transfer(user, std::time::Instant::now())?
+                    } else {
+                        amikvm_core::sharing::disconnect(user_id)?
+                    }
+                }
+                _ => return Err(Error::Invalid("Unknown sharing operation".into())),
+            };
+            snapshot.can_control = snapshot.sharing.can_control();
+            if handoff {
+                snapshot.software_keys.clear();
+            }
+            permit.send(if handoff {
+                Outgoing::Handoff {
+                    bytes,
+                    reply: handoff_reply,
+                }
+            } else if operation == "disconnect" {
+                Outgoing::Bytes(bytes)
+            } else {
+                Outgoing::SharingAnswer(bytes)
+            });
+            crate::diagnostics::session(&self.input_app, &snapshot);
+            let _ = self.input_app.emit("session-state", snapshot.clone());
+        }
+        if handoff {
+            self.keyboard.lock().await.clear();
+        }
+        Ok(())
+    }
+
+    pub async fn hid(&self, mouse: bool, report: &[u8]) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        if !self
+            .snapshot
+            .lock()
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?
+            .can_control
+        {
+            return Err(Error::Authentication(
+                "Session has view-only permissions".into(),
+            ));
+        }
+        if (mouse && ![4, 6].contains(&report.len())) || (!mouse && report.len() != 8) {
+            return Err(Error::Invalid("Invalid HID report length".into()));
+        }
+        self.sender
+            .send(Outgoing::Hid {
+                mouse,
+                report: report.to_vec(),
+            })
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))
+    }
+
+    pub async fn stop(&self) {
+        let _ = self.cancel.send(true);
+        let mut finished = self.finished.clone();
+        while !*finished.borrow_and_update() {
+            if finished.changed().await.is_err() {
+                break;
+            }
+        }
+    }
+
+    pub async fn tap(&self, report: [u8; 8]) -> Result<()> {
+        self.key_input_ready()?;
+        let mut keyboard = self.keyboard.lock().await;
+        let baseline = keyboard.report();
+        self.send_keyboard(&mut keyboard, input::merge_reports(baseline, report))
+            .await?;
+        tokio::time::sleep(Duration::from_millis(35)).await;
+        self.send_keyboard(&mut keyboard, baseline).await
+    }
+
+    pub async fn type_text(&self, text: &str, mode: TextMode) -> Result<()> {
+        self.key_input_ready()?;
+        let reports = input::text_reports(text, mode)?;
+        let mut keyboard = self.keyboard.lock().await;
+        let baseline = keyboard.report();
+        for report in reports {
+            if let Err(error) = self.send_keyboard(&mut keyboard, report).await {
+                let _ = self.hid(false, &[0; 8]).await;
+                return Err(error);
+            }
+            tokio::time::sleep(Duration::from_millis(15)).await;
+        }
+        self.send_keyboard(&mut keyboard, baseline).await
+    }
+
+    fn input_ready(&self) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        if !self
+            .snapshot
+            .lock()
+            .map_err(|_| Error::Invalid("Session unavailable".into()))?
+            .can_control
+        {
+            return Err(Error::Authentication(
+                "Session has view-only permissions".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn send_keyboard(&self, keyboard: &mut input::State, report: [u8; 8]) -> Result<()> {
+        if let Err(error) = self.hid(false, &report).await {
+            keyboard.clear();
+            update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub async fn toggle_modifier(&self, code: &str) -> Result<()> {
+        self.key_input_ready()?;
+        let mut keyboard = self.keyboard.lock().await;
+        self.input_ready()?;
+        let report = keyboard.toggle_modifier(code)?;
+        self.send_keyboard(&mut keyboard, report).await?;
+        update(&self.input_app, &self.snapshot, |s| {
+            s.software_keys = keyboard.software_keys()
+        });
+        Ok(())
+    }
+
+    pub async fn release_software(&self) -> Result<()> {
+        let mut keyboard = self.keyboard.lock().await;
+        let report = keyboard.release_software();
+        update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
+        if self.input_ready().is_ok() {
+            self.send_keyboard(&mut keyboard, report).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn input(&self, event: Event) -> Result<()> {
+        if let Event::Key { code, pressed } = &event {
+            if *pressed && matches!(code.as_str(), "KeyL" | "F1") {
+                let modifiers = self.keyboard.lock().await.report()[0];
+                if modifiers & 0x11 != 0 && (code == "F1" || modifiers & 0x22 != 0) {
+                    let mut keyboard = self.keyboard.lock().await;
+                    keyboard.clear();
+                    update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
+                    self.send_keyboard(&mut keyboard, [0; 8]).await?;
+                    drop(keyboard);
+                    if code == "KeyL" {
+                        let app = self.input_app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(error) = crate::ui::toggle_log_file(app.clone()).await {
+                                crate::diagnostics::record(
+                                    &app,
+                                    amikvm_core::diagnostics::Level::Error,
+                                    amikvm_core::diagnostics::Category::Interface,
+                                    None,
+                                    "操作失败",
+                                    &error,
+                                );
+                                let state = app.state::<crate::commands::AppState>();
+                                if let Ok(mut ui) = state.ui.lock() {
+                                    ui.error = Some(error);
+                                }
+                                app.emit("ui-changed", ()).ok();
+                            }
+                        });
+                    } else {
+                        let state = self.input_app.state::<crate::commands::AppState>();
+                        state
+                            .ui
+                            .lock()
+                            .map_err(|_| Error::Invalid("Interface state unavailable".into()))?
+                            .dialog = crate::ui::Dialog::About;
+                        self.input_app.emit("ui-changed", ()).ok();
+                    }
+                    return Ok(());
+                }
+            }
+            let token = self
+                .snapshot
+                .lock()
+                .ok()
+                .filter(|s| s.mouse.active())
+                .and_then(|s| s.mouse.token);
+            if let Some(token) = token {
+                self.sender
+                    .send(Outgoing::Mouse(crate::mouse::Operation::Key {
+                        code: code.clone(),
+                        pressed: *pressed,
+                        token,
+                    }))
+                    .await
+                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                return Ok(());
+            }
+            if code == "KeyT"
+                && *pressed
+                && self.snapshot.lock().is_ok_and(|s| s.mouse_mode == Some(1))
+                && self.keyboard.lock().await.report()[0] & 0x44 != 0
+            {
+                return self.mouse_command(input::mouse::Command::Start, None).await;
+            }
+        }
+        match &event {
+            Event::Key { code, pressed } => {
+                let mut keyboard = self.keyboard.lock().await;
+                if let Err(error) = self.input_ready() {
+                    if !pressed {
+                        keyboard.key(code, false);
+                        return Ok(());
+                    }
+                    return Err(error);
+                }
+                if let Some(report) = keyboard.key(code, *pressed) {
+                    self.send_keyboard(&mut keyboard, report).await?;
+                }
+            }
+            Event::SoftKey { code, pressed } => {
+                if *pressed {
+                    self.key_input_ready()?;
+                }
+                let mut keyboard = self.keyboard.lock().await;
+                if let Err(error) = self.input_ready() {
+                    if !pressed {
+                        keyboard.soft_key(code, false);
+                        update(&self.input_app, &self.snapshot, |s| {
+                            s.software_keys = keyboard.software_keys()
+                        });
+                        return Ok(());
+                    }
+                    return Err(error);
+                }
+                let report = keyboard
+                    .soft_key(code, *pressed)
+                    .ok_or_else(|| Error::Invalid("无法识别软键盘按键".into()))?;
+                self.send_keyboard(&mut keyboard, report).await?;
+                update(&self.input_app, &self.snapshot, |s| {
+                    s.software_keys = keyboard.software_keys()
+                });
+            }
+            Event::Release | Event::ReleaseAll => {
+                if matches!(event, Event::ReleaseAll) {
+                    update(&self.input_app, &self.snapshot, |s| s.mouse.suspend());
+                }
+                let mut keyboard = self.keyboard.lock().await;
+                let report = if matches!(event, Event::ReleaseAll) {
+                    keyboard.clear();
+                    update(&self.input_app, &self.snapshot, |s| s.software_keys.clear());
+                    [0; 8]
+                } else {
+                    keyboard.release_physical()
+                };
+                if self.input_ready().is_err() {
+                    return Ok(());
+                }
+                self.send_keyboard(&mut keyboard, report).await?;
+                let mode = self
+                    .snapshot
+                    .lock()
+                    .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                    .mouse_mode;
+                self.hid(
+                    true,
+                    if mode.unwrap_or(2) == 2 {
+                        &[0; 6]
+                    } else {
+                        &[0; 4]
+                    },
+                )
+                .await?;
+            }
+            Event::Pointer { .. } => {
+                self.input_ready()?;
+                self.sender
+                    .send(Outgoing::Mouse(crate::mouse::Operation::Pointer(event)))
+                    .await
+                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn mouse_command(
+        &self,
+        command: input::mouse::Command,
+        token: Option<Uuid>,
+    ) -> Result<()> {
+        self.input_ready()?;
+        let (reply, written) = oneshot::channel();
+        tokio::time::timeout(Duration::from_secs(20), async {
+            self.sender
+                .send(Outgoing::Mouse(crate::mouse::Operation::Command {
+                    command,
+                    token,
+                    reply,
+                }))
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            written.await.map_err(|_| {
+                Error::Protocol("Connection closed before mouse operation completed".into())
+            })?
+        })
+        .await
+        .map_err(|_| Error::Timeout("Mouse operation write"))?
+    }
+
+    pub fn mouse_display(&self) {
+        crate::mouse::display(&self.input_app, &self.snapshot, &self.video);
+    }
+
+    fn key_input_ready(&self) -> Result<()> {
+        self.input_ready()?;
+        if self.snapshot.lock().is_ok_and(|s| s.mouse.active()) {
+            return Err(Error::Invalid("请先结束当前鼠标校准".into()));
+        }
+        Ok(())
+    }
+}

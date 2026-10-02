@@ -1,0 +1,5 @@
+[target.'cfg(all(target_os = "windows", target_env = "msvc"))']
+# OpenH264's C++ runtime and Rust's runtime must be linked into the single EXE.
+# Tauri's partial CRT override is disabled in tauri.conf.json: Rust supplies the
+# complete static CRT, including UCRT, instead of conflicting linker defaults.
+rustflags = ["-C", "target-feature=+crt-static"]

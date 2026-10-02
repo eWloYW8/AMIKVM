@@ -1,0 +1,13 @@
+JViewer
+AGENTS.md
+docs/
+node_modules/
+target/
+dist/
+artifacts/
+.DS_Store
+*.log
+.env
+.env.*
+*.tsbuildinfo
+src-tauri/gen/

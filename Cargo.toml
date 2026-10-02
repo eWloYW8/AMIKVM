@@ -1,0 +1,18 @@
+[workspace]
+members = ["crates/amikvm-core", "src-tauri"]
+resolver = "2"
+exclude = ["vendor/fatfs"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+
+[patch.crates-io]
+fatfs = { path = "vendor/fatfs" }
