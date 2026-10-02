@@ -2698,5 +2698,17 @@
   "Wayland 不提供修改本机锁定键状态的公共接口": [
     "Wayland has no public interface for changing local lock state",
     "Wayland ne fournit pas d’interface publique pour modifier les verrous locaux"
+  ],
+  "同步和校准会移动本机光标；移动产生的事件不会再次发送给远端。": [
+    "Synchronization and calibration move the local cursor; generated motion is not sent back to the host.",
+    "La synchronisation et le calibrage déplacent le curseur local ; ces mouvements ne sont pas renvoyés à l’hôte."
+  ],
+  "当前显示系统不支持移动本机光标，可使用相对鼠标捕获。": [
+    "This display system cannot move the local cursor. Relative mouse capture is available.",
+    "Ce système d’affichage ne permet pas de déplacer le curseur local. La capture relative de la souris reste disponible."
+  ],
+  "本机光标移动失败，校准已暂停。": [
+    "Could not move the local cursor. Calibration has been paused.",
+    "Impossible de déplacer le curseur local. Le calibrage est suspendu."
   ]
 }

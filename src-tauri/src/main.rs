@@ -3,6 +3,7 @@
 mod captures;
 mod clipboard;
 mod commands;
+mod cursor;
 mod diagnostics;
 mod folders;
 mod keyboard;
@@ -30,6 +31,7 @@ fn main() {
         .setup(|app| {
             let path = app.path().app_config_dir()?.join("servers.json");
             app.manage(AppState::new(path)?);
+            cursor::install();
             keyboard::install(app.handle())?;
             pointer_capture::install(app.handle())?;
             diagnostics::record(
@@ -71,6 +73,7 @@ fn main() {
                         for session in sessions.values() {
                             session.cancel_text();
                             session.cancel_capture();
+                            session.cancel_cursor();
                         }
                     }
                 }

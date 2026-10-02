@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub mod capture;
+pub mod cursor;
 pub mod encryption;
 pub mod layout;
 pub mod macros;
@@ -16,6 +17,9 @@ pub mod routing;
 pub enum Event {
     Focus {
         focused: bool,
+    },
+    Viewport {
+        viewport: Option<cursor::Viewport>,
     },
     Key {
         code: String,

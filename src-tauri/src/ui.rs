@@ -653,6 +653,7 @@ pub async fn ui_input(
         && !matches!(
             event,
             amikvm_core::input::Event::Release
+                | amikvm_core::input::Event::Viewport { viewport: None }
                 | amikvm_core::input::Event::Focus { focused: false }
                 | amikvm_core::input::Event::ReleaseAll
                 | amikvm_core::input::Event::Key { pressed: false, .. }
@@ -667,6 +668,7 @@ pub async fn ui_input(
         if matches!(
             event,
             amikvm_core::input::Event::Release
+                | amikvm_core::input::Event::Viewport { viewport: None }
                 | amikvm_core::input::Event::Focus { focused: false }
                 | amikvm_core::input::Event::ReleaseAll
                 | amikvm_core::input::Event::Key { pressed: false, .. }

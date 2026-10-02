@@ -9,6 +9,10 @@ pub struct State {
     pub message: Option<String>,
     #[serde(skip)]
     last: Option<(f64, f64, u32, u32)>,
+    #[serde(skip)]
+    mapping: Option<(u32, u32, u32, u32)>,
+    #[serde(skip)]
+    remainder: (f64, f64),
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Change {
@@ -25,12 +29,16 @@ impl State {
         self.active = false;
         self.message = None;
         self.last = None;
+        self.mapping = None;
+        self.remainder = (0., 0.);
     }
     pub fn release(&mut self) -> bool {
         let changed = self.requested() || self.active;
         self.token = None;
         self.active = false;
         self.last = None;
+        self.mapping = None;
+        self.remainder = (0., 0.);
         if changed {
             self.message = Some("鼠标捕获已释放。".into());
         }
@@ -75,5 +83,28 @@ impl State {
         previous
             .filter(|(_, _, w, h)| (*w, *h) == (width, height))
             .map_or((0., 0.), |(px, py, _, _)| (x - px, y - py))
+    }
+    pub fn baseline(&mut self, x: f64, y: f64, width: u32, height: u32) {
+        self.last = Some((x, y, width, height));
+    }
+    pub fn scaled(
+        &mut self,
+        dx: f64,
+        dy: f64,
+        width: u32,
+        height: u32,
+        source: (u32, u32),
+    ) -> (f64, f64) {
+        let mapping = (width, height, source.0, source.1);
+        if self.mapping != Some(mapping) {
+            self.mapping = Some(mapping);
+            self.remainder = (0., 0.);
+        }
+        let x =
+            (dx * f64::from(source.0) / f64::from(width) + self.remainder.0).clamp(-4096., 4096.);
+        let y =
+            (dy * f64::from(source.1) / f64::from(height) + self.remainder.1).clamp(-4096., 4096.);
+        self.remainder = (x.fract(), y.fract());
+        (x.trunc(), y.trunc())
     }
 }

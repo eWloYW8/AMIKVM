@@ -80,6 +80,32 @@ function Video({ props: p }: { props: Props }) {
   current.current = p;
   const captureRequest = useRef<string | null>(null);
   useEffect(() => {
+    const element = canvas.current;
+    if (!element || !p.serverId) return;
+    let pending = 0;
+    const update = () => {
+      pending = 0;
+      const bounds = element.getBoundingClientRect();
+      const clip = element.parentElement?.getBoundingClientRect();
+      const rect = (r: DOMRect) => ({ left: r.left, top: r.top, width: r.width, height: r.height });
+      sendInput({ id: String(p.serverId), event: { type: 'viewport', viewport: p.enabled && p.visible && bounds.width > 0 && bounds.height > 0 && clip ? { bounds: rect(bounds), clip: rect(clip), scale: window.devicePixelRatio } : null } });
+    };
+    const schedule = () => { if (!pending) pending = requestAnimationFrame(update); };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(element);
+    if (element.parentElement) observer.observe(element.parentElement);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('scroll', schedule, true);
+    schedule();
+    return () => {
+      cancelAnimationFrame(pending); observer.disconnect();
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule, true);
+      sendInput({ id: String(p.serverId), event: { type: 'viewport', viewport: null } });
+    };
+  }, [p.serverId, p.enabled, p.visible, sendInput]);
+  useEffect(() => { if (p.cursorFocus) canvas.current?.focus({ preventScroll: true }); }, [p.cursorFocus]);
+  useEffect(() => {
     const focus = () => sendInput({ id: String(p.serverId), event: { type: 'focus', focused: !document.hidden && document.activeElement === canvas.current } });
     window.addEventListener('focus', focus);
     window.addEventListener('blur', focus);

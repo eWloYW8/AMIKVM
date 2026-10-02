@@ -34,23 +34,36 @@ pub struct Effect {
     pub reports: Vec<Vec<u8>>,
     pub release_keyboard: bool,
     pub notify: bool,
-    pub pointer: Option<Option<Uuid>>,
+    pub pointer: Option<Pointer>,
+}
+#[derive(Clone, Copy)]
+pub struct Pointer {
+    pub token: Option<Uuid>,
+    pub position: (f64, f64),
 }
 fn context(s: &mut Snapshot) -> bool {
-    let changed = s.mouse.context(
+    let width = if s.video_source_width > 0 {
+        s.video_source_width
+    } else {
+        s.video_width
+    };
+    let height = if s.video_source_height > 0 {
+        s.video_source_height
+    } else {
+        s.video_height
+    };
+    let mut changed = s.mouse.context(
         s.mouse_mode == Some(1),
         s.phase == "connected" && s.video_connected && s.video_signal && s.can_control,
-        if s.video_source_width > 0 {
-            s.video_source_width
-        } else {
-            s.video_width
-        },
-        if s.video_source_height > 0 {
-            s.video_source_height
-        } else {
-            s.video_height
-        },
+        width,
+        height,
     );
+    changed |= s
+        .mouse
+        .viewport(s.local_cursor.viewport.and_then(|v| v.area(width, height)));
+    if changed {
+        s.local_cursor.cancel();
+    }
     let released = !crate::pointer_capture::eligible(s) && s.mouse_capture.release();
     changed || released
 }
@@ -83,6 +96,10 @@ pub fn process(
         if operation.2.is_some() && !pointer_owner(app, snapshot) {
             return Ok(Effect::default());
         }
+        let current = operation
+            .2
+            .as_ref()
+            .and_then(|_| crate::cursor::position(app, snapshot));
         let mut s = snapshot
             .lock()
             .map_err(|_| Error::Invalid("Mouse state unavailable".into()))?;
@@ -123,9 +140,9 @@ pub fn process(
             });
         }
         if let Some(mut event) = operation.2 {
-            let token = match &event {
-                input::Event::Pointer { capture, .. } => *capture,
-                _ => None,
+            let (token, mut position) = match &event {
+                input::Event::Pointer { capture, x, y, .. } => (*capture, (*x, *y)),
+                _ => return Err(Error::Invalid("Expected a pointer event".into())),
             };
             if !s.video_signal || s.mouse.active() || !s.mouse_capture.allows(token) {
                 return Ok(Effect::default());
@@ -138,14 +155,88 @@ pub fn process(
                 dx,
                 dy,
                 entered,
+                buttons,
+                wheel,
                 ..
             } = &mut event
             {
-                if !x.is_finite() || !y.is_finite() || *width == 0 || *height == 0 {
+                if ![*x, *y, *dx, *dy, *wheel].iter().all(|v| v.is_finite())
+                    || *width == 0
+                    || *height == 0
+                {
                     return Err(Error::Invalid("Invalid pointer movement".into()));
+                }
+                if s.mouse_mode == Some(1) && token.is_none() {
+                    if let Some((px, py, previous_buttons)) = s.local_cursor.stale(*x, *y, current)
+                    {
+                        if *buttons == previous_buttons && *wheel == 0. {
+                            return Ok(Effect::default());
+                        }
+                        // Keep a queued button/wheel change, but not its old
+                        // coordinates from before the native warp.
+                        *x = px;
+                        *y = py;
+                        *dx = 0.;
+                        *dy = 0.;
+                        position = (px, py);
+                    }
+                }
+                if s.mouse_mode == Some(1)
+                    && token.is_none()
+                    && s.local_cursor.synthetic(*x, *y, *buttons, *wheel)
+                {
+                    s.mouse_capture.baseline(*x, *y, *width, *height);
+                    return Ok(Effect::default());
+                }
+                if s.mouse_mode == Some(1) && s.mouse.needs_sync {
+                    let mut reports: Vec<Vec<u8>> = s
+                        .mouse
+                        .command(Command::Synchronize, None, std::time::Instant::now())?
+                        .into_iter()
+                        .map(Vec::from)
+                        .collect();
+                    if *buttons != 0 || *wheel != 0. {
+                        reports.extend(input::mouse(
+                            &input::Event::Pointer {
+                                buttons: *buttons,
+                                x: *x,
+                                y: *y,
+                                width: *width,
+                                height: *height,
+                                dx: 0.,
+                                dy: 0.,
+                                wheel: *wheel,
+                                capture: token,
+                                entered: false,
+                            },
+                            false,
+                            0,
+                        )?);
+                    }
+                    s.mouse_capture.baseline(*x, *y, *width, *height);
+                    return Ok(Effect {
+                        reports,
+                        notify: true,
+                        ..Default::default()
+                    });
                 }
                 if token.is_none() {
                     (*dx, *dy) = s.mouse_capture.movement(*x, *y, *width, *height, *entered);
+                }
+                if s.mouse_mode.unwrap_or(2) != 2 {
+                    let source = (
+                        if s.video_source_width > 0 {
+                            s.video_source_width
+                        } else {
+                            s.video_width
+                        },
+                        if s.video_source_height > 0 {
+                            s.video_source_height
+                        } else {
+                            s.video_height
+                        },
+                    );
+                    (*dx, *dy) = s.mouse_capture.scaled(*dx, *dy, *width, *height, source);
                 }
             }
             let source_width = if s.video_source_width > 0 {
@@ -154,11 +245,10 @@ pub fn process(
                 s.video_width
             };
             let reports = input::mouse(&event, s.mouse_mode.unwrap_or(2) == 2, source_width)?;
-            s.mouse.movement(&reports);
             return Ok(Effect {
                 reports,
                 notify: cancelled,
-                pointer: Some(token),
+                pointer: Some(Pointer { token, position }),
                 ..Default::default()
             });
         }
@@ -185,11 +275,7 @@ pub fn tick(
         changed = context(&mut s);
         let id = s.server_id;
         drop(s);
-        let selected = app
-            .state::<AppState>()
-            .ui
-            .lock()
-            .is_ok_and(|ui| ui.selected == Some(id));
+        let selected = pointer_owner(app, snapshot);
         let closing = app.state::<AppState>().shutdown.blocks_connection(id);
         if selected && !closing {
             if let Ok(mut s) = snapshot.lock() {
@@ -249,12 +335,12 @@ pub async fn write<W: AsyncWrite + Unpin>(
     sequence: &AtomicU32,
     cipher: Option<&input::encryption::Cipher>,
     reports: &[Vec<u8>],
-    pointer: Option<Option<Uuid>>,
+    pointer: Option<Pointer>,
     state: &mut input::pointer::State,
 ) -> Result<Written> {
     let mut sent = false;
     for report in reports {
-        if pointer.is_some() && !pointer_owner(app, snapshot) {
+        if !pointer_owner(app, snapshot) {
             return Ok(Written {
                 sent,
                 complete: false,
@@ -263,12 +349,13 @@ pub async fn write<W: AsyncWrite + Unpin>(
         if !snapshot.lock().is_ok_and(|s| {
             s.can_control
                 && s.video_connected
+                && s.video_signal
                 && ((s.mouse_mode.unwrap_or(2) == 2) == (report.len() == 6))
-                && pointer.is_none_or(|token| {
+                && pointer.is_none_or(|pointer| {
                     s.video_signal
                         && !s.mouse.active()
-                        && s.mouse_capture.allows(token)
-                        && (token.is_none() || crate::pointer_capture::eligible(&s))
+                        && s.mouse_capture.allows(pointer.token)
+                        && (pointer.token.is_none() || crate::pointer_capture::eligible(&s))
                 })
         }) {
             return Ok(Written {
@@ -284,7 +371,21 @@ pub async fn write<W: AsyncWrite + Unpin>(
         )?;
         transport::write_packet(writer, &bytes).await?;
         state.written(report);
+        if pointer.is_some() {
+            if let Ok(mut s) = snapshot.lock() {
+                s.mouse.movement(std::slice::from_ref(report));
+            }
+        }
         sent = true;
+    }
+    if sent {
+        crate::cursor::follow(
+            app,
+            snapshot,
+            pointer.map(|p| p.position),
+            reports.last().unwrap()[0],
+        )
+        .await?;
     }
     Ok(Written {
         sent,

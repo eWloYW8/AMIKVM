@@ -2170,7 +2170,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
         })
     };
     frame_style["cursor"] = json!(if ui.hidden_local_cursor.contains(&s.id)
-        || snapshot.is_some_and(|s| s.mouse_mode == Some(1))
+        || snapshot.is_some_and(|s| s.mouse_mode == Some(1) && !s.mouse.active())
     {
         "none"
     } else {
@@ -2300,7 +2300,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                 vec![
                     node(
                         "video",
-                        json!({"serverId":s.id,"enabled":controllable && !paused && snapshot.is_some_and(|v|v.video_signal) && matches!(ui.dialog,Dialog::None),"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"captureToken":if matches!(ui.dialog,Dialog::None) && !paused { snapshot.and_then(|v|v.mouse_capture.token) } else {None},"style":frame_style}),
+                        json!({"serverId":s.id,"enabled":controllable && !paused && snapshot.is_some_and(|v|v.video_signal) && matches!(ui.dialog,Dialog::None),"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"cursorFocus":snapshot.and_then(|v|v.local_cursor.focus),"captureToken":if matches!(ui.dialog,Dialog::None) && !paused { snapshot.and_then(|v|v.mouse_capture.token) } else {None},"style":frame_style}),
                         vec![],
                     ),
                     group(
@@ -2859,6 +2859,16 @@ fn mouse_calibration(server: &Server, snapshot: Option<&Snapshot>, controllable:
     let action = |command: Value| json!({"action":"mouse","id":server.id,"token":state.token,"command":command});
     let settings = state.candidate.unwrap_or(state.settings);
     let mut children = vec![label("strong", "", tr("鼠标校准与同步"))];
+    if let Some(message) = snapshot.and_then(|s| s.local_cursor.message.as_deref()) {
+        children.push(label("p", "input-help", translated(message)));
+    }
+    if snapshot.is_some_and(|s| s.local_cursor.supported) {
+        children.push(label(
+            "p",
+            "input-help",
+            tr("同步和校准会移动本机光标；移动产生的事件不会再次发送给远端。"),
+        ));
+    }
     if !state.active() {
         children.push(node("form", json!({"key":format!("mouse-settings-{}-{}-{}",server.id,settings.threshold,settings.acceleration),"values":{"threshold":settings.threshold.to_string(),"gain":settings.multiplier()},"action":{"action":"mouse_settings","id":server.id}}), vec![
             field("threshold", tr("加速阈值"), "number", json!({"min":1,"max":65535,"required":true,"disabled":!enabled})),

@@ -41,6 +41,7 @@ pub struct Snapshot {
     pub keyboard_options: input::routing::Options,
     pub text_input: input::TextStatus,
     pub mouse_capture: input::capture::State,
+    pub local_cursor: input::cursor::State,
     pub input_encryption: bool,
     pub encryption_required: bool,
     pub host_display: Option<u16>,
@@ -99,6 +100,7 @@ impl Snapshot {
             keyboard_options: Default::default(),
             text_input: Default::default(),
             mouse_capture: Default::default(),
+            local_cursor: crate::cursor::state(),
             input_encryption: false,
             encryption_required: false,
             host_display: None,
@@ -1698,6 +1700,12 @@ impl Session {
         }
     }
 
+    pub(crate) fn cancel_cursor(&self) {
+        if let Ok(mut s) = self.snapshot.lock() {
+            s.local_cursor.cancel();
+        }
+    }
+
     pub async fn capture_request(&self, enabled: bool) -> Result<()> {
         if enabled {
             self.key_input_ready()?;
@@ -1775,6 +1783,29 @@ impl Session {
     }
 
     pub async fn input(&self, mut event: Event) -> Result<()> {
+        if let Event::Viewport { viewport } = event {
+            let id = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .server_id;
+            if viewport.is_some() && !crate::pointer_capture::selected(&self.input_app, id) {
+                return Ok(());
+            }
+            let mut s = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            let changed = s.local_cursor.viewport(viewport)?;
+            if changed {
+                s.mouse.suspend();
+            }
+            drop(s);
+            if changed {
+                crate::mouse::notify(&self.input_app, &self.snapshot);
+            }
+            return Ok(());
+        }
         if let Event::Focus { focused } = event {
             self.focus(focused);
             if !focused {
@@ -2004,7 +2035,9 @@ impl Session {
             Event::PointerCapture { .. } => {
                 unreachable!("capture callback handled before input routing")
             }
-            Event::Focus { .. } => unreachable!("focus handled before input routing"),
+            Event::Focus { .. } | Event::Viewport { .. } => {
+                unreachable!("context handled before input routing")
+            }
         }
         Ok(())
     }
@@ -2097,6 +2130,7 @@ impl Session {
     async fn release_input(&self, all: bool) -> Result<()> {
         self.cancel_text();
         self.cancel_capture();
+        self.cancel_cursor();
         if all {
             update(&self.input_app, &self.snapshot, |s| s.mouse.suspend());
         }

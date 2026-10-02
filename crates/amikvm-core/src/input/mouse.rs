@@ -98,6 +98,10 @@ pub struct State {
     remainder: (i64, i64),
     #[serde(skip)]
     alt: u8,
+    #[serde(skip)]
+    area: Option<(u32, u32, u32, u32)>,
+    #[serde(skip)]
+    pub needs_sync: bool,
 }
 impl State {
     pub fn active(&self) -> bool {
@@ -119,6 +123,10 @@ impl State {
         self.relative = relative;
         self.eligible = eligible && (1..=65535).contains(&width) && (1..=65535).contains(&height);
         self.bounds = (width, height);
+        if changed || old_eligible != self.eligible {
+            self.area = None;
+            self.needs_sync = true;
+        }
         if !relative || !self.eligible {
             self.reference = None;
             self.remainder = (0, 0);
@@ -126,6 +134,18 @@ impl State {
             self.reset_reference();
         }
         cancelled || changed || old_eligible != self.eligible
+    }
+    pub fn viewport(&mut self, area: Option<(u32, u32, u32, u32)>) -> bool {
+        if self.area == area {
+            return false;
+        }
+        self.area = area;
+        self.needs_sync = true;
+        self.suspend();
+        if self.relative && self.eligible {
+            self.reset_reference();
+        }
+        true
     }
     fn require(&self) -> Result<()> {
         if !self.relative || !self.eligible {
@@ -251,6 +271,9 @@ impl State {
                 self.paused = paused;
                 self.next = (!paused).then_some(now + INTERVAL);
                 self.alt = 0;
+                if !paused && self.needs_sync {
+                    return Ok(self.synchronize());
+                }
                 Ok(vec![[0; 4]])
             }
             Command::Configure { settings } => {
@@ -332,9 +355,10 @@ impl State {
         self.reset_reference();
     }
     fn reset_reference(&mut self) {
+        let (x, y, _, _) = self.area.unwrap_or((0, 0, self.bounds.0, self.bounds.1));
         self.reference = Some(Point {
-            x: 0.,
-            y: 0.,
+            x: f64::from(x),
+            y: f64::from(y),
             width: self.bounds.0,
             height: self.bounds.1,
         });
@@ -342,9 +366,110 @@ impl State {
     }
     fn synchronize(&mut self) -> Vec<[u8; 4]> {
         self.reset_reference();
-        // A full source-sized movement reaches the host's top-left corner;
-        // source dimensions can differ from the encoded/downscaled output.
-        let mut reports = relative(0, -(self.bounds.0 as i32), -(self.bounds.1 as i32), 0);
+        self.needs_sync = false;
+        // Account for deceleration as well: a source-sized raw movement is
+        // insufficient when the confirmed host multiplier is below one.
+        let gain = if self.settings.threshold <= 252 {
+            self.settings.acceleration.min(100)
+        } else {
+            100
+        };
+        let distance = |size: u32| (u64::from(size) * 100).div_ceil(u64::from(gain)) as i32;
+        let mut reports = relative(0, -distance(self.bounds.0), -distance(self.bounds.1), 0);
+        if let Some((x, y, _, _)) = self.area {
+            if x > 0 || y > 0 {
+                // Compensate a scrolled viewport using the confirmed host
+                // acceleration, including chunks below its threshold.
+                let mut position = (0i64, 0i64);
+                let mut remainder = (0i64, 0i64);
+                for _ in 0..8 {
+                    let delta = (i64::from(x) - position.0, i64::from(y) - position.1);
+                    let distance = delta.0.abs() + delta.1.abs();
+                    if distance == 0 {
+                        break;
+                    }
+                    let gain = if distance >= i64::from(self.settings.threshold)
+                        && self.settings.threshold <= 252
+                    {
+                        f64::from(self.settings.acceleration) / 100.
+                    } else {
+                        1.
+                    };
+                    let mut raw = (
+                        (delta.0 as f64 / gain).round() as i32,
+                        (delta.1 as f64 / gain).round() as i32,
+                    );
+                    let chunks = if raw.0.unsigned_abs() + raw.1.unsigned_abs()
+                        < u32::from(self.settings.threshold)
+                    {
+                        if self.settings.threshold == 1 {
+                            break;
+                        }
+                        raw = (delta.0 as i32, delta.1 as i32);
+                        let budget = i32::from(self.settings.threshold - 1).min(CHUNK);
+                        let mut chunks = vec![];
+                        while raw != (0, 0) {
+                            let x = raw.0.clamp(-budget, budget);
+                            let remaining = budget - x.abs();
+                            let y = raw.1.clamp(-remaining, remaining);
+                            chunks.push([0, x as i8 as u8, y as i8 as u8, 0]);
+                            raw.0 -= x;
+                            raw.1 -= y;
+                        }
+                        chunks
+                    } else {
+                        relative(0, raw.0, raw.1, 0)
+                    };
+                    let saved = (position, remainder, reports.len());
+                    for r in chunks {
+                        let dx = i64::from(r[1] as i8);
+                        let dy = i64::from(r[2] as i8);
+                        let gain = if dx.abs() + dy.abs() >= i64::from(self.settings.threshold) {
+                            i64::from(self.settings.acceleration)
+                        } else {
+                            100
+                        };
+                        let amount = (dx * gain + remainder.0, dy * gain + remainder.1);
+                        position.0 += amount.0 / 100;
+                        position.1 += amount.1 / 100;
+                        remainder = (amount.0 % 100, amount.1 % 100);
+                        let clipped = (
+                            position
+                                .0
+                                .clamp(0, i64::from(self.bounds.0.saturating_sub(1))),
+                            position
+                                .1
+                                .clamp(0, i64::from(self.bounds.1.saturating_sub(1))),
+                        );
+                        if clipped.0 != position.0 {
+                            remainder.0 = 0;
+                        }
+                        if clipped.1 != position.1 {
+                            remainder.1 = 0;
+                        }
+                        position = clipped;
+                        reports.push(r);
+                    }
+                    let remaining =
+                        (i64::from(x) - position.0).abs() + (i64::from(y) - position.1).abs();
+                    let inside = position.0 >= i64::from(x) && position.1 >= i64::from(y);
+                    let was_inside = saved.0.0 >= i64::from(x) && saved.0.1 >= i64::from(y);
+                    if remaining > distance || (remaining == distance && (!inside || was_inside)) {
+                        // These reports have not been sent. Keep the closest
+                        // reachable point instead of oscillating across it.
+                        position = saved.0;
+                        remainder = saved.1;
+                        reports.truncate(saved.2);
+                        break;
+                    }
+                }
+                if let Some(p) = self.reference.as_mut() {
+                    p.x = position.0 as f64;
+                    p.y = position.1 as f64;
+                }
+                self.remainder = remainder;
+            }
+        }
         reports.push([0; 4]);
         reports
     }
@@ -376,9 +501,8 @@ impl State {
             y as u64
         };
         let p = self.reference.expect("running reference");
-        if p.x + step_x as f64 >= f64::from(self.bounds.0)
-            || p.y + step_y as f64 >= f64::from(self.bounds.1)
-        {
+        let (_, _, max_x, max_y) = self.area.unwrap_or((0, 0, self.bounds.0, self.bounds.1));
+        if p.x + step_x as f64 >= f64::from(max_x) || p.y + step_y as f64 >= f64::from(max_y) {
             return self.synchronize();
         }
         self.reference.as_mut().unwrap().x += step_x as f64;
