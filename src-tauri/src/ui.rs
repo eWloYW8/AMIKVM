@@ -46,6 +46,7 @@ pub enum Dialog {
     Sharing(Uuid),
     Confirmation,
     About,
+    Connection(Uuid),
 }
 
 #[derive(Clone)]
@@ -129,6 +130,9 @@ pub struct Model {
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Intent {
     About,
+    ConnectionInfo {
+        id: Uuid,
+    },
     LogConfigure {
         values: Value,
     },
@@ -826,6 +830,13 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
         return Err("请先处理当前关闭窗口。".into());
     }
     match intent {
+        Intent::ConnectionInfo { id } => {
+            state
+                .ui
+                .lock()
+                .map_err(|_| "Interface state unavailable")?
+                .dialog = Dialog::Connection(id)
+        }
         Intent::About => {
             state
                 .ui

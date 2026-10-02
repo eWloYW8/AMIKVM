@@ -36,6 +36,8 @@ pub struct Snapshot {
     pub input_encryption: bool,
     pub encryption_required: bool,
     pub host_display: Option<u16>,
+    pub host_display_supported: Option<bool>,
+    pub service: amikvm_core::service::State,
     pub ipmi: amikvm_core::ipmi::State,
     pub can_control: bool,
     pub frames_received: u64,
@@ -84,6 +86,8 @@ impl Snapshot {
             input_encryption: false,
             encryption_required: false,
             host_display: None,
+            host_display_supported: None,
+            service: Default::default(),
             ipmi: amikvm_core::ipmi::State::default(),
             can_control: false,
             frames_received: 0,
@@ -506,8 +510,13 @@ impl Session {
                         8 => {
                             update(&app, &worker_snapshot, |s| {
                                 s.phase = "disconnected".into();
-                                s.message =
-                                    Some(format!("BMC terminated session ({})", header.status));
+                                s.message = Some(
+                                    amikvm_core::service::end_reason(header.status)
+                                        .map(str::to_owned)
+                                        .unwrap_or_else(|| {
+                                            format!("BMC terminated session ({})", header.status)
+                                        }),
+                                );
                             });
                             break;
                         }
@@ -723,6 +732,51 @@ impl Session {
                                 .await
                                 .map_err(|_| Error::Protocol("Connection closed".into()))?;
                         }
+                        37 | 38 | 56 => {
+                            let (changed, close, config) = {
+                                let mut snapshot = worker_snapshot
+                                    .lock()
+                                    .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                let mut config = snapshot.config.clone().ok_or_else(|| {
+                                    Error::Invalid("Session configuration unavailable".into())
+                                })?;
+                                let (changed, close) = match header.kind {
+                                    37 => {
+                                        let effect = snapshot
+                                            .service
+                                            .receive_services(&body, &mut config)?;
+                                        (effect.media_changed, effect.close)
+                                    }
+                                    38 => {
+                                        let changed =
+                                            snapshot.service.receive_media(&body, &mut config)?;
+                                        let media = snapshot.service.media.clone().unwrap();
+                                        snapshot.mouse_mode = Some(media.mouse_mode);
+                                        snapshot.host_display_supported =
+                                            Some(media.host_display_control);
+                                        (changed, false)
+                                    }
+                                    _ => (
+                                        snapshot.service.receive_instances(&body, &mut config)?,
+                                        false,
+                                    ),
+                                };
+                                if close {
+                                    snapshot.phase = "disconnected".into();
+                                    snapshot.can_control = false;
+                                    snapshot.message = snapshot.service.notice.map(str::to_owned);
+                                }
+                                snapshot.config = Some(config.clone());
+                                (changed, close, config)
+                            };
+                            if close {
+                                break;
+                            }
+                            if changed {
+                                worker_media.reconfigure(config).await;
+                            }
+                            update(&app, &worker_snapshot, |_| {});
+                        }
                         39 => {
                             let users = amikvm_core::sharing::users(&body)?;
                             update(&app, &worker_snapshot, |s| s.users = users);
@@ -898,6 +952,16 @@ impl Session {
             return Err(Error::Authentication(
                 "Session has view-only permissions".into(),
             ));
+        }
+        if matches!(control, Control::HostDisplay { .. })
+            && self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .host_display_supported
+                == Some(false)
+        {
+            return Err(Error::Invalid("BMC 已禁用主机显示控制。".into()));
         }
         if let Control::InputEncryption { enabled } = control {
             self.input(Event::ReleaseAll).await?;

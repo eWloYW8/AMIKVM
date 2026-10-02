@@ -103,6 +103,15 @@ pub fn session(app: &AppHandle, s: &crate::session::Snapshot) {
         json!({"phase":s.ipmi.boot.phase,"revision":s.ipmi.boot.revision,"message":s.ipmi.boot.message}),
         Level::Info,
     );
+    changed(
+        app,
+        Category::Session,
+        id,
+        "service",
+        "服务器配置已更新",
+        json!({"revision":s.service.revision,"changes":s.service.changes,"notice":s.service.notice}),
+        Level::Info,
+    );
     for media in &s.media {
         let key = match media.kind {
             amikvm_core::media::scsi::Kind::Cdrom => "cd",

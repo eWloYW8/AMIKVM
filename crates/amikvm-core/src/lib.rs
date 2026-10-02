@@ -10,6 +10,7 @@ pub mod protocol;
 pub mod recording;
 pub mod recordings;
 pub mod server;
+pub mod service;
 pub mod sharing;
 pub mod transport;
 pub mod video;

@@ -149,6 +149,16 @@ fn count(fields: &Fields, key: &str) -> u8 {
 }
 
 impl WebSession {
+    pub fn with_config(&self, config: SessionConfig) -> Self {
+        Self {
+            server: self.server.clone(),
+            config,
+            client: self.client.clone(),
+            cookie: self.cookie.clone(),
+            csrf: self.csrf.clone(),
+            token: self.token.clone(),
+        }
+    }
     pub fn protect_diagnostics(&self, recorder: &crate::diagnostics::Recorder) {
         recorder.protect(&self.token);
         if let Some(csrf) = &self.csrf {

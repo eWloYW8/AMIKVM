@@ -2162,5 +2162,181 @@
   "应用程序": [
     "Application",
     "Application"
+  ],
+  "连接信息": [
+    "Connection information",
+    "Informations de connexion"
+  ],
+  "KVM 端口": [
+    "KVM port",
+    "Port KVM"
+  ],
+  "CD/DVD 实例数": [
+    "CD/DVD instances",
+    "Instances CD/DVD"
+  ],
+  "磁盘实例数": [
+    "Disk instances",
+    "Instances disque"
+  ],
+  "配置的重试次数": [
+    "Configured retry count",
+    "Nombre de tentatives configuré"
+  ],
+  "配置的重试间隔（秒）": [
+    "Configured retry interval (seconds)",
+    "Intervalle configuré (secondes)"
+  ],
+  "服务器尚未提供服务配置。": [
+    "The server has not provided service configuration yet.",
+    "Le serveur n’a pas encore fourni la configuration des services."
+  ],
+  "服务运行中": [
+    "Service active",
+    "Service actif"
+  ],
+  "服务已禁用": [
+    "Service disabled",
+    "Service désactivé"
+  ],
+  "网络接口：{}": [
+    "Network interface: {}",
+    "Interface réseau : {}"
+  ],
+  "非加密端口：{}": [
+    "Unencrypted port: {}",
+    "Port non chiffré : {}"
+  ],
+  "加密端口：{}": [
+    "Encrypted port: {}",
+    "Port chiffré : {}"
+  ],
+  "空闲超时：{} 秒": [
+    "Inactivity timeout: {} seconds",
+    "Délai d’inactivité : {} secondes"
+  ],
+  "最大会话数：{}": [
+    "Maximum sessions: {}",
+    "Nombre maximal de sessions : {}"
+  ],
+  "空闲超时范围：{}–{} 秒": [
+    "Inactivity timeout range: {}–{} seconds",
+    "Plage d’inactivité : {}–{} secondes"
+  ],
+  "服务状态": [
+    "Service state",
+    "État du service"
+  ],
+  "网络接口": [
+    "Network interface",
+    "Interface réseau"
+  ],
+  "非加密端口": [
+    "Unencrypted port",
+    "Port non chiffré"
+  ],
+  "加密端口": [
+    "Encrypted port",
+    "Port chiffré"
+  ],
+  "空闲超时": [
+    "Inactivity timeout",
+    "Délai d’inactivité"
+  ],
+  "最大会话数": [
+    "Maximum sessions",
+    "Nombre maximal de sessions"
+  ],
+  "最大空闲超时": [
+    "Maximum inactivity timeout",
+    "Délai maximal d’inactivité"
+  ],
+  "最小空闲超时": [
+    "Minimum inactivity timeout",
+    "Délai minimal d’inactivité"
+  ],
+  "新增服务": [
+    "Service added",
+    "Service ajouté"
+  ],
+  "服务已移除": [
+    "Service removed",
+    "Service supprimé"
+  ],
+  "服务器服务配置已改变。": [
+    "Server service configuration changed.",
+    "Configuration des services modifiée."
+  ],
+  "虚拟介质实例配置已改变，活动重定向已停止。": [
+    "Virtual media instances changed; active redirections have stopped.",
+    "Les instances de supports virtuels ont changé ; les redirections actives sont arrêtées."
+  ],
+  "虚拟介质服务配置已改变，活动重定向已停止。": [
+    "Virtual media service configuration changed; active redirections have stopped.",
+    "La configuration des supports virtuels a changé ; les redirections actives sont arrêtées."
+  ],
+  "KVM 或 Web 服务配置已改变，请重新连接服务器。": [
+    "KVM or Web service configuration changed. Reconnect to the server.",
+    "La configuration KVM ou Web a changé. Reconnectez-vous au serveur."
+  ],
+  "BMC 重定向服务要求关闭会话。": [
+    "The BMC redirection service requested session closure.",
+    "Le service de redirection BMC a demandé la fermeture de la session."
+  ],
+  "重定向服务配置已改变，请重新连接服务器。": [
+    "Redirection service configuration changed. Reconnect to the server.",
+    "La configuration du service de redirection a changé. Reconnectez-vous au serveur."
+  ],
+  "BMC Web 会话已注销，远程控制台已断开。": [
+    "The BMC Web session logged out; the remote console disconnected.",
+    "La session Web BMC est déconnectée ; la console distante est fermée."
+  ],
+  "KVM 许可证已过期，会话已关闭。": [
+    "The KVM license expired and the session closed.",
+    "La licence KVM a expiré et la session est fermée."
+  ],
+  "KVM 会话空闲超时，连接已关闭。": [
+    "The KVM session reached its inactivity timeout.",
+    "La session KVM a atteint son délai d’inactivité."
+  ],
+  "BMC 已终止远程控制台会话。": [
+    "The BMC terminated the remote console session.",
+    "Le BMC a terminé la session de console distante."
+  ],
+  "BMC Web 服务已重启，连接已关闭。": [
+    "The BMC Web service restarted and the connection closed.",
+    "Le service Web BMC a redémarré et la connexion est fermée."
+  ],
+  "BMC 正在执行热复位，连接已关闭。": [
+    "The BMC is performing a warm reset; the connection closed.",
+    "Le BMC effectue une réinitialisation à chaud ; la connexion est fermée."
+  ],
+  "BMC 正在恢复出厂设置，连接已关闭。": [
+    "The BMC is restoring factory defaults; the connection closed.",
+    "Le BMC rétablit les paramètres d’usine ; la connexion est fermée."
+  ],
+  "已有 VNC 会话占用控制台，请关闭该会话后重新连接。": [
+    "A VNC session is using the console. Close it before reconnecting.",
+    "Une session VNC utilise la console. Fermez-la avant de vous reconnecter."
+  ],
+  "服务器配置已更新": [
+    "Server configuration updated",
+    "Configuration du serveur mise à jour"
+  ],
+  "BMC 已禁用主机显示控制。": [
+    "The BMC disabled host display control.",
+    "Le BMC a désactivé le contrôle de l’écran hôte."
+  ],
+  "服务名称": [
+    "Service name",
+    "Nom du service"
+  ],
+  "介质连接已在配置更新、权限切换或关闭过程中取消": [
+    "Media connection canceled during configuration, control, or session changes",
+    "Connexion au média annulée pendant un changement de configuration, de contrôle ou de session"
+  ],
+  "虚拟介质配置正在更新，请稍后重试": [
+    "Virtual media configuration is updating; retry shortly",
+    "La configuration des médias virtuels est en cours de mise à jour ; réessayez dans un instant"
   ]
 }

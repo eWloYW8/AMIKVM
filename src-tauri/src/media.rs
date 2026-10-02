@@ -41,7 +41,9 @@ struct Registry {
     pending: HashMap<Slot, Pending>,
 }
 pub struct Manager {
-    web: Arc<WebSession>,
+    web: Mutex<Arc<WebSession>>,
+    reconfiguring: AtomicBool,
+    configuration: AsyncMutex<()>,
     registry: AsyncMutex<Registry>,
     snapshot: Arc<Mutex<Snapshot>>,
     app: AppHandle,
@@ -57,7 +59,9 @@ impl Manager {
         parent_cancel: watch::Receiver<bool>,
     ) -> Self {
         Self {
-            web,
+            web: Mutex::new(web),
+            reconfiguring: AtomicBool::new(false),
+            configuration: AsyncMutex::new(()),
             registry: AsyncMutex::new(Registry::default()),
             snapshot,
             app,
@@ -80,8 +84,16 @@ impl Manager {
     ) -> Result<()> {
         let mut generation_rx = self.generation.subscribe();
         let generation = *generation_rx.borrow_and_update();
-        if self.closed.load(Ordering::Acquire) || *self.parent_cancel.borrow() {
-            return Err(Error::Invalid("Session is closing".into()));
+        if (self.closed.load(Ordering::Acquire) || self.reconfiguring.load(Ordering::Acquire))
+            || *self.parent_cancel.borrow()
+        {
+            return Err(Error::Invalid(
+                if self.reconfiguring.load(Ordering::Acquire) {
+                    "虚拟介质配置正在更新，请稍后重试".into()
+                } else {
+                    "Session is closing".into()
+                },
+            ));
         }
         if self
             .snapshot
@@ -100,12 +112,12 @@ impl Manager {
         let (_completion, finished) = watch::channel(());
         {
             let mut registry = self.registry.lock().await;
-            if self.closed.load(Ordering::Acquire)
+            if (self.closed.load(Ordering::Acquire) || self.reconfiguring.load(Ordering::Acquire))
                 || *self.parent_cancel.borrow()
                 || *self.generation.borrow() != generation
             {
                 return Err(Error::Invalid(
-                    "介质连接已在权限切换或关闭过程中取消".into(),
+                    "介质连接已在配置更新、权限切换或关闭过程中取消".into(),
                 ));
             }
             if registry.pending.contains_key(&slot)
@@ -141,12 +153,13 @@ impl Manager {
         }
         let pending = Status::pending(kind, number, &path, readonly, boost);
         self.update(pending.clone());
+        let web = self.web.lock().unwrap().clone();
         let mut parent_cancel = self.parent_cancel.clone();
         let result = tokio::select! {
             biased;
             _ = parent_cancel.changed() => Err(Error::Invalid("Session is closing".into())),
-            _ = generation_rx.changed() => Err(Error::Invalid("介质连接已在权限切换过程中取消".into())),
-            result = Redirector::start(self.web.clone(), path, pending.clone(), usb) => result,
+            _ = generation_rx.changed() => Err(Error::Invalid("介质连接已在配置更新、权限切换或关闭过程中取消".into())),
+            result = Redirector::start(web, path, pending.clone(), usb) => result,
         };
         let mut registry = self.registry.lock().await;
         let redirector = match result {
@@ -160,7 +173,7 @@ impl Manager {
                 return Err(error);
             }
         };
-        if self.closed.load(Ordering::Acquire)
+        if (self.closed.load(Ordering::Acquire) || self.reconfiguring.load(Ordering::Acquire))
             || *self.parent_cancel.borrow()
             || *self.generation.borrow() != generation
             || self
@@ -173,7 +186,7 @@ impl Manager {
             self.update(redirector.status.borrow().clone());
             self.registry.lock().await.pending.remove(&slot);
             return Err(Error::Invalid(
-                "介质连接已在权限切换或关闭过程中取消".into(),
+                "介质连接已在配置更新、权限切换或关闭过程中取消".into(),
             ));
         }
         let mut status = redirector.status.clone();
@@ -233,6 +246,14 @@ impl Manager {
     pub async fn stop_all(&self) {
         self.closed.store(true, Ordering::Release);
         self.stop_active().await;
+    }
+    pub async fn reconfigure(&self, config: amikvm_core::auth::SessionConfig) {
+        let _operation = self.configuration.lock().await;
+        self.reconfiguring.store(true, Ordering::Release);
+        self.stop_active().await;
+        let mut web = self.web.lock().unwrap();
+        *web = Arc::new(web.with_config(config));
+        self.reconfiguring.store(false, Ordering::Release);
     }
     // Ending current redirects must allow new redirects after control is regained.
     pub async fn stop_active(&self) {

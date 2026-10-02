@@ -264,6 +264,115 @@ fn about() -> Node {
     )
 }
 
+fn connection_info(server: &Server, snapshot: Option<&Snapshot>) -> Node {
+    let mut rows = vec![heading(tr("连接信息"), &server.name, "Info")];
+    if let Some(snapshot) = snapshot {
+        if let Some(config) = &snapshot.config {
+            for (caption, value) in [
+                (tr("KVM 端口"), config.kvm_port.to_string()),
+                (tr("CD/DVD 实例数"), config.cd_instances.to_string()),
+                (tr("磁盘实例数"), config.hd_instances.to_string()),
+                (tr("配置的重试次数"), config.retry_count.to_string()),
+                (
+                    tr("配置的重试间隔（秒）"),
+                    config.retry_interval.to_string(),
+                ),
+            ] {
+                rows.push(group(
+                    "div",
+                    "about-row",
+                    vec![label("span", "", caption), label("strong", "", value)],
+                ));
+            }
+        }
+        if let Some(notice) = snapshot.service.notice {
+            rows.push(label("p", "input-help", tr(notice)));
+        }
+        if let Some(message) = &snapshot.message {
+            rows.push(label("p", "input-help", translated(message)));
+        }
+        for change in &snapshot.service.changes {
+            rows.push(label(
+                "p",
+                "input-help",
+                format!(
+                    "{}: {}",
+                    change.service,
+                    change
+                        .fields
+                        .iter()
+                        .map(|field| tr(field))
+                        .collect::<Vec<_>>()
+                        .join(" · ")
+                ),
+            ));
+        }
+        for service in &snapshot.service.services {
+            rows.push(group(
+                "div",
+                "service-card",
+                vec![
+                    label("h3", "", &service.name),
+                    label(
+                        "p",
+                        "input-help",
+                        if service.enabled {
+                            tr("服务运行中")
+                        } else {
+                            tr("服务已禁用")
+                        },
+                    ),
+                    group(
+                        "div",
+                        "service-details",
+                        vec![
+                            label("span", "", lformat!("网络接口：{}", service.interface)),
+                            label("span", "", lformat!("非加密端口：{}", service.port)),
+                            label("span", "", lformat!("加密端口：{}", service.secure_port)),
+                            label(
+                                "span",
+                                "",
+                                lformat!("空闲超时：{} 秒", service.inactivity_seconds),
+                            ),
+                            label("span", "", lformat!("最大会话数：{}", service.max_sessions)),
+                            label(
+                                "span",
+                                "",
+                                lformat!(
+                                    "空闲超时范围：{}–{} 秒",
+                                    service.minimum_inactivity_seconds,
+                                    service.maximum_inactivity_seconds
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
+            ));
+        }
+        if snapshot.service.services.is_empty() {
+            rows.push(label("p", "input-help", tr("服务器尚未提供服务配置。")));
+        }
+    } else {
+        rows.push(label("p", "input-help", tr("请先连接服务器")));
+    }
+    rows.push(group(
+        "div",
+        "modal-actions",
+        vec![button(
+            "button secondary",
+            tr("关闭"),
+            "",
+            json!({"action":"close_dialog"}),
+            false,
+        )],
+    ));
+    node(
+        "dialog",
+        json!({"key":format!("connection-{}",server.id),"className":"modal modal-wide service-modal","action":{"action":"close_dialog"}}),
+        rows,
+    )
+}
+
 fn node(kind: &'static str, props: Value, children: Vec<Node>) -> Node {
     Node {
         kind,
@@ -967,6 +1076,13 @@ fn card(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
 fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Node> {
     let (key, class, action, values, children) = match ui.dialog {
         Dialog::About => return Some(about()),
+        Dialog::Connection(id) => {
+            let server = servers.iter().find(|s| s.id == id)?;
+            return Some(connection_info(
+                server,
+                sessions.iter().find(|s| s.server_id == id),
+            ));
+        }
         Dialog::None => return None,
         Dialog::Confirmation => {
             let confirmation = ui.confirmation.as_ref()?;
@@ -1949,6 +2065,12 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
     let control = |value: Value| json!({"action":"control","id":s.id,"control":value});
     let mut toolbar = vec![
         titled(
+            "Info",
+            tr("连接信息"),
+            json!({"action":"connection_info","id":s.id}),
+            false,
+        ),
+        titled(
             "Keyboard",
             if ui.soft_keyboard.contains(&s.id) {
                 tr("关闭软键盘")
@@ -2063,12 +2185,12 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                 vec![
                     node(
                         "video",
-                        json!({"serverId":s.id,"enabled":controllable,"streaming":connected,"visible":snapshot.is_some_and(|v|v.video_signal),"style":frame_style}),
+                        json!({"serverId":s.id,"enabled":controllable,"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"style":frame_style}),
                         vec![],
                     ),
                     group(
                         "div",
-                        if snapshot.is_some_and(|v| v.video_signal) {
+                        if connected && snapshot.is_some_and(|v| v.video_signal) {
                             "video-state hidden"
                         } else {
                             "video-state"
@@ -2081,7 +2203,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                                 "",
                                 snapshot
                                     .and_then(|s| s.message.as_ref())
-                                    .cloned()
+                                    .map(|message| translated(message).into_owned())
                                     .unwrap_or_else(|| format!("{}:{}", s.host, s.web_port)),
                             ),
                         ],
@@ -2400,7 +2522,9 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                             control(
                                 json!({"action":"host_display","locked":snapshot.and_then(|v|v.host_display)!=Some(1)}),
                             ),
-                            !controllable,
+                            !controllable
+                                || snapshot
+                                    .is_some_and(|s| s.host_display_supported == Some(false)),
                         ),
                     ],
                 ),
@@ -3377,7 +3501,7 @@ fn media(server: &Server, snapshot: Option<&Snapshot>) -> Node {
                 ));
             }
             if let Some(message) = &m.message {
-                item.push(label("small", "media-error", message));
+                item.push(label("small", "media-error", translated(message)));
             }
             children.push(group("div", "session-user", item));
         }

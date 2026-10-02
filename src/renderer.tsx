@@ -1,6 +1,6 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent } from 'react';
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { Activity, ArrowUpRight, Camera, ChevronRight, Circle, Clock3, FolderOpen, FolderSync, HardDrive, Keyboard, KeyRound, LayoutGrid, LockKeyhole, Maximize, Monitor, MoreHorizontal, Pause, Play, Plug, Plus, Power, RefreshCw, Search, Server, ShieldCheck, Square, Star, TerminalSquare, Unplug, Users, Video as VideoIcon, X } from 'lucide-react';
+import { Activity, ArrowUpRight, Camera, ChevronRight, Circle, Clock3, FolderOpen, FolderSync, HardDrive, Info, Keyboard, KeyRound, LayoutGrid, LockKeyhole, Maximize, Monitor, MoreHorizontal, Pause, Play, Plug, Plus, Power, RefreshCw, Search, Server, ShieldCheck, Square, Star, TerminalSquare, Unplug, Users, Video as VideoIcon, X } from 'lucide-react';
 
 export type Intent = Record<string, unknown>;
 type Props = Record<string, unknown>;
@@ -11,7 +11,7 @@ const Actions = createContext<Dispatch>(async () => {});
 type InputMessage = { id: string; event: Record<string, unknown> };
 const InputEvents = createContext<(message: InputMessage) => void>(() => {});
 const Form = createContext<{ values: Props; set: (name: string, value: unknown) => void; busy: boolean } | null>(null);
-const icons = { Activity, ArrowUpRight, Camera, ChevronRight, Circle, Clock3, FolderOpen, FolderSync, HardDrive, Keyboard, KeyRound, LayoutGrid, LockKeyhole, Maximize, Monitor, MoreHorizontal, Pause, Play, Plug, Plus, Power, RefreshCw, Search, Server, ShieldCheck, Square, Star, TerminalSquare, Unplug, Users, Video: VideoIcon, X };
+const icons = { Activity, ArrowUpRight, Camera, ChevronRight, Circle, Clock3, FolderOpen, FolderSync, HardDrive, Info, Keyboard, KeyRound, LayoutGrid, LockKeyhole, Maximize, Monitor, MoreHorizontal, Pause, Play, Plug, Plus, Power, RefreshCw, Search, Server, ShieldCheck, Square, Star, TerminalSquare, Unplug, Users, Video: VideoIcon, X };
 const tags = new Set(['div', 'span', 'aside', 'main', 'nav', 'header', 'footer', 'section', 'article', 'p', 'h1', 'h2', 'h3', 'strong', 'small', 'em']);
 
 function Icon({ name, size = 17, fill }: { name: string; size?: number; fill?: string }) {
