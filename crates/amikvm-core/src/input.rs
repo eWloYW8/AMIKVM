@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub mod capture;
+pub mod characters;
 pub mod cursor;
 pub mod encryption;
 pub mod layout;
@@ -109,6 +110,9 @@ pub struct State {
 }
 
 impl State {
+    pub fn physical_layout(&mut self, layout: Option<layout::Layout>, caps: bool) {
+        self.physical.configure(layout, caps);
+    }
     pub fn physical_key(&mut self, event: physical::Key<'_>, host: routing::Host) -> Vec<[u8; 8]> {
         let software = self.software.report();
         self.physical
@@ -119,6 +123,14 @@ impl State {
     }
     pub fn physical_code(&self, code: &str, key: &str, location: u8) -> String {
         self.physical.code_for(code, key, location).into()
+    }
+    pub fn local_code(&self, code: &str, key: &str, location: u8) -> String {
+        let bytes = key.as_bytes();
+        if bytes.len() == 1 && bytes[0].is_ascii_alphabetic() {
+            format!("Key{}", char::from(bytes[0].to_ascii_uppercase()))
+        } else {
+            self.physical_code(code, key, location)
+        }
     }
     pub fn release_key(&mut self, code: &str, key: &str, location: u8) {
         self.physical.release_key(code, key, location);

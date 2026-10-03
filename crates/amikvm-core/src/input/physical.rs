@@ -1,7 +1,9 @@
-//! Logical modifiers honor host remapping; ordinary characters use physical codes.
+//! Logical input honors remapping and the selected remote character layout.
 //! Bind each source until release so layout changes cannot leave remote keys held.
 use super::{
     Keyboard as Report,
+    characters::{self, Stroke},
+    layout::Layout,
     routing::{Host, Modifiers},
     usage,
 };
@@ -56,6 +58,14 @@ impl Source {
 struct Binding {
     code: String,
     alt_graph: bool,
+    glyph: Option<Stroke>,
+    adjustment: Adjustment,
+    order: u64,
+}
+#[derive(Default)]
+struct Adjustment {
+    shift: Option<bool>,
+    alt_gr: Option<bool>,
 }
 
 /// DOM locations are 1/2 for left/right. AltGraph denotes right Alt even when
@@ -121,8 +131,45 @@ pub struct Keyboard {
     held: BTreeMap<Source, Binding>,
     pending_ctrl: Option<Source>,
     suppressed_ctrl: BTreeSet<Source>,
+    layout: Option<Layout>,
+    caps: bool,
+    order: u64,
 }
 impl Keyboard {
+    pub fn configure(&mut self, layout: Option<Layout>, caps: bool) {
+        self.layout = layout.filter(|layout| layout.physical());
+        self.caps = caps;
+    }
+    fn character(&self, code: &str, key: &str, modifiers: Option<Modifiers>) -> Option<Stroke> {
+        let bits = self.base_report()[0];
+        characters::stroke(
+            self.layout?,
+            code,
+            key,
+            modifiers.map_or(bits & 0x22 != 0, |m| m.shift),
+            self.caps,
+            modifiers.is_some_and(|m| m.alt_graph) || self.alt_graph(),
+        )
+    }
+    fn target<'a>(
+        &self,
+        code: &'a str,
+        key: &'a str,
+        location: u8,
+        client: Client,
+        glyph: Option<Stroke>,
+    ) -> &'a str {
+        if self.layout.is_some() && location == 3 {
+            return characters::numpad(code, key, glyph);
+        }
+        if let Some(glyph) = glyph {
+            return glyph.code;
+        }
+        if key == " " {
+            return "Space";
+        }
+        resolve(code, key, location, client)
+    }
     pub fn key(&mut self, event: Key<'_>, client: Client, host: Host) -> Vec<[u8; 8]> {
         let Key {
             code,
@@ -132,7 +179,28 @@ impl Keyboard {
             modifiers,
         } = event;
         let source = Source::new(code, key, location);
-        let target = self.code_for_client(code, key, location, client).to_owned();
+        let mut glyph = self.character(code, key, modifiers);
+        let target = self
+            .held
+            .get(&source)
+            .map_or_else(
+                || self.target(code, key, location, client, glyph),
+                |binding| binding.code.as_str(),
+            )
+            .to_owned();
+        // Keypad digits/operators keep their numeric location and actual modifiers.
+        if glyph.is_some_and(|glyph| glyph.code != target) {
+            glyph = None;
+        }
+        let bits = self.base_report()[0];
+        let shift = modifiers.map_or(bits & 0x22 != 0, |m| m.shift);
+        let graph = modifiers.is_some_and(|m| m.alt_graph) || self.alt_graph();
+        let adjustment = glyph.map_or_else(Adjustment::default, |glyph| Adjustment {
+            shift: (glyph.shift != shift || (glyph.shift && bits & 0x22 == 0))
+                .then_some(glyph.shift),
+            alt_gr: (glyph.alt_gr != graph || (glyph.alt_gr && bits & 0x40 == 0))
+                .then_some(glyph.alt_gr),
+        });
         if usage(&target).is_none() {
             return vec![];
         }
@@ -164,11 +232,15 @@ impl Keyboard {
                 && target == "ControlLeft"
                 && self.report()[0] & 1 == 0
                 && !self.alt_graph();
+            self.order = self.order.wrapping_add(1);
             self.held.insert(
                 source.clone(),
                 Binding {
                     code: target,
                     alt_graph,
+                    glyph,
+                    adjustment,
+                    order: self.order,
                 },
             );
             if defer {
@@ -198,7 +270,7 @@ impl Keyboard {
         self.held
             .get(&Source::new(code, key, location))
             .map_or_else(
-                || resolve(code, key, location, client),
+                || self.target(code, key, location, client, self.character(code, key, None)),
                 |binding| binding.code.as_str(),
             )
     }
@@ -219,6 +291,33 @@ impl Keyboard {
         self.held.values().any(|binding| binding.alt_graph)
     }
     pub fn report(&self) -> [u8; 8] {
+        let mut report = self.base_report();
+        if let Some(binding) = self
+            .held
+            .values()
+            .filter(|b| b.glyph.is_some())
+            .max_by_key(|b| b.order)
+        {
+            if let Some(shift) = binding.adjustment.shift {
+                if shift {
+                    if report[0] & 0x22 == 0 {
+                        report[0] |= 2;
+                    }
+                } else {
+                    report[0] &= !0x22;
+                }
+            }
+            if let Some(alt_gr) = binding.adjustment.alt_gr {
+                if alt_gr {
+                    report[0] |= 0x40;
+                } else {
+                    report[0] &= !0x40;
+                }
+            }
+        }
+        report
+    }
+    fn base_report(&self) -> [u8; 8] {
         let mut report = Report::default();
         for (source, binding) in &self.held {
             if self.pending_ctrl.as_ref() != Some(source) && !self.suppressed_ctrl.contains(source)
@@ -235,5 +334,6 @@ impl Keyboard {
         self.held.clear();
         self.pending_ctrl = None;
         self.suppressed_ctrl.clear();
+        self.order = 0;
     }
 }

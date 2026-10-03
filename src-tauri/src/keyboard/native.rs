@@ -1,4 +1,4 @@
-//! Recover legacy Sun keysyms absent from WebKit's DOM key-name table.
+//! Recover legacy Sun keysyms and the accent behind DOM's generic Dead name.
 //! The webview still owns event delivery, focus, and its raw physical code.
 #[cfg(target_os = "linux")]
 use amikvm_core::input::routing::Modifiers;
@@ -40,6 +40,9 @@ pub async fn logical_key(
                 if modifiers.alt_graph {
                     state |= gdk::ModifierType::MOD5_MASK;
                 }
+                if modifiers.caps_lock {
+                    state |= gdk::ModifierType::LOCK_MASK;
+                }
             }
             let (keyval, _, _, _) =
                 keymap.translate_keyboard_state(hardware, state, i32::from(group))?;
@@ -47,6 +50,22 @@ pub async fn logical_key(
                 0x1005_ff72 => Some("Copy"),
                 0x1005_ff74 => Some("Paste"),
                 0x1005_ff75 => Some("Cut"),
+                0xff9d => Some("5"), // KP_Begin has no DOM name; AWT's keypad 5.
+                0xffac => Some("Separator"),
+                0xffae => Some("NumpadDecimal"),
+                0xfe50 => Some("`"),
+                0xfe51 => Some("´"),
+                0xfe52 => Some("^"),
+                0xfe53 => Some("~"),
+                0xfe54 => Some("¯"),
+                0xfe55 => Some("˘"),
+                0xfe56 => Some("˙"),
+                0xfe57 => Some("¨"),
+                0xfe58 => Some("˚"),
+                0xfe59 => Some("˝"),
+                0xfe5a => Some("ˇ"),
+                0xfe5b => Some("¸"),
+                0xfe5c => Some("˛"),
                 _ => None,
             }
         })();

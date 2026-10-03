@@ -70,6 +70,8 @@ pub struct Modifiers {
     pub meta: bool,
     #[serde(default, rename = "altGraph")]
     pub alt_graph: bool,
+    #[serde(default, rename = "capsLock")]
+    pub caps_lock: bool,
 }
 impl Modifiers {
     pub fn bits(self) -> u8 {

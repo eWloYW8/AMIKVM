@@ -1889,16 +1889,57 @@ impl Session {
             }
             return Ok(());
         }
+        if let Event::Key { modifiers, .. } = &event {
+            let (layout, caps) = {
+                let snapshot = self
+                    .snapshot
+                    .lock()
+                    .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                let layout = snapshot
+                    .config
+                    .as_ref()
+                    .map(|config| config.keyboard_layout.as_str())
+                    .unwrap_or("AD");
+                let layout = if layout == "AD" {
+                    self.input_app
+                        .state::<crate::commands::AppState>()
+                        .host_keyboard
+                        .snapshot
+                        .lock()
+                        .ok()
+                        .and_then(|s| s.layout)
+                } else {
+                    input::layout::Layout::parse(layout).ok()
+                };
+                let caps = if snapshot.lock_leds_known {
+                    snapshot.lock_leds & 2 != 0
+                } else {
+                    modifiers.is_some_and(|m| m.caps_lock)
+                };
+                (layout, caps)
+            };
+            self.keyboard.lock().await.physical_layout(layout, caps);
+        }
         #[cfg(target_os = "linux")]
         if let Event::Key {
             code,
             key,
             pressed: true,
             modifiers,
-            ..
+            location,
         } = &mut event
         {
-            if key == "Unidentified" {
+            let unresolved_keypad = *location == 3
+                && matches!(key.as_str(), "," | ".")
+                && !matches!(
+                    self.keyboard
+                        .lock()
+                        .await
+                        .physical_code(code, key, *location)
+                        .as_str(),
+                    "Comma" | "Period"
+                );
+            if key == "Unidentified" || key == "Dead" || unresolved_keypad {
                 if let Some(logical) =
                     crate::keyboard::native::logical_key(&self.input_app, code, *modifiers).await
                 {
@@ -2026,7 +2067,7 @@ impl Session {
                     .map(|s| (s.keyboard_options, s.mouse_mode))
                     .map_err(|_| Error::Invalid("Session unavailable".into()))?;
                 let keyboard = self.keyboard.lock().await;
-                let routed_code = keyboard.physical_code(code, key, *location);
+                let routed_code = keyboard.local_code(code, key, *location);
                 keyboard
                     .local_modifiers(key, *modifiers)
                     .and_then(|modifiers| {
