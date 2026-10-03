@@ -22,6 +22,15 @@ pub fn stroke(
     if chars.next().is_some() || character.is_control() || character.is_whitespace() {
         return None;
     }
+    // XKB's JIS Yen key produces backslash without Shift. Keep its distinct
+    // physical position instead of resolving that character to the JIS Ro key.
+    if layout == Layout::Jp && code == "IntlYen" && key == "\\" && !shift && !alt_gr {
+        return Some(Stroke {
+            code: "IntlYen",
+            shift,
+            alt_gr,
+        });
+    }
     let positions = positions(layout);
     let matches = |code, shift, alt_gr| {
         if alt_gr && matches!(layout, Layout::Us | Layout::Jp) {

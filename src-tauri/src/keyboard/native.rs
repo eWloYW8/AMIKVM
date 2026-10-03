@@ -78,7 +78,7 @@ pub async fn logical_key(
 /// GTK's X11 and Wayland hardware keycodes use the evdev/XKB physical positions.
 /// Only look up a recognized DOM position; never guess an unidentified source.
 #[cfg(target_os = "linux")]
-fn hardware_code(code: &str) -> Option<u32> {
+pub(super) fn hardware_code(code: &str) -> Option<u32> {
     use amikvm_core::input::layout::{Layout, positions};
     const WRITING: [u32; 48] = [
         49, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,

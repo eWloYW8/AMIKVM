@@ -10,6 +10,7 @@ pub struct Snapshot {
     pub layout: Option<Layout>,
     pub native_name: Option<String>,
     pub notice: Option<String>,
+    pub ambiguous: Vec<Layout>,
 }
 #[derive(Default)]
 pub struct Host {
@@ -83,6 +84,7 @@ fn identified(layout: Option<Layout>, native_name: String) -> Snapshot {
         } else {
             None
         },
+        ..Default::default()
     }
 }
 
@@ -174,16 +176,19 @@ fn detect(host: &Host) -> Snapshot {
     let Some(keymap) = gdk::Keymap::for_display(&display) else {
         return Snapshot::default();
     };
-    let keycodes = [
-        49, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
-        34, 35, 51, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 94, 52, 53, 54, 55, 56, 57, 58, 59,
-        60, 61,
-    ];
+    let positions: std::collections::BTreeSet<_> = layout::positions(Layout::Us)
+        .iter()
+        .chain(layout::positions(Layout::Jp))
+        .copied()
+        .collect();
     let mut observed = vec![];
-    for (i, keycode) in keycodes.iter().enumerate() {
+    for code in positions {
+        let Some(keycode) = native::hardware_code(code) else {
+            continue;
+        };
         for shift in [false, true] {
             if let Some((value, _, _, _)) = keymap.translate_keyboard_state(
-                *keycode,
+                keycode,
                 if shift {
                     gdk::ModifierType::SHIFT_MASK
                 } else {
@@ -193,46 +198,23 @@ fn detect(host: &Host) -> Snapshot {
             ) {
                 if let Some(c) = gdk::keys::Key::from(value).to_unicode() {
                     if !c.is_control() {
-                        observed.push((i, shift, c));
+                        observed.push((code, shift, c));
                     }
                 }
             }
         }
     }
-    let candidates: Vec<_> = layout::ALL
-        .into_iter()
-        .filter(|l| l.physical() && !l.japanese())
-        .filter(|l| {
-            observed.len() >= 60
-                && observed
-                    .iter()
-                    .filter(|(i, shift, c)| {
-                        l.caption(layout::positions(*l)[*i], *shift, false, false)
-                            .is_some_and(|s| s.starts_with(*c))
-                    })
-                    .count()
-                    * 100
-                    >= observed.len() * 95
-        })
-        .collect();
+    let candidates = layout::from_glyphs(&observed);
     if candidates.len() == 1 {
         identified(Some(candidates[0]), format!("GDK 字符识别 · group {group}"))
     } else {
         Snapshot {
             native_name: Some(format!("GDK group {group}")),
-            notice: Some(if candidates.is_empty() {
-                "当前字符布局无法识别，请手动选择。".into()
-            } else {
-                format!(
-                    "当前字符符合 {}，请手动选择具体布局。",
-                    candidates
-                        .iter()
-                        .map(|l| l.id())
-                        .collect::<Vec<_>>()
-                        .join(" / ")
-                )
-            }),
-            layout: None,
+            notice: candidates
+                .is_empty()
+                .then(|| "当前字符布局无法识别，请手动选择。".into()),
+            ambiguous: candidates,
+            ..Default::default()
         }
     }
 }

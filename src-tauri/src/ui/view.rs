@@ -2625,10 +2625,20 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
             "keyboard-detection",
             &match ui.host_keyboard.layout {
                 Some(layout) => lformat!("本机布局：{}", layout.label()),
+                None if !ui.host_keyboard.ambiguous.is_empty() => lformat!(
+                    "当前字符符合 {}，请手动选择具体布局。",
+                    ui.host_keyboard
+                        .ambiguous
+                        .iter()
+                        .map(|layout| layout.id())
+                        .collect::<Vec<_>>()
+                        .join(" / ")
+                ),
                 None => ui
                     .host_keyboard
                     .notice
-                    .clone()
+                    .as_deref()
+                    .map(|notice| crate::locale::message(notice).into_owned())
                     .unwrap_or_else(|| tr("正在识别本机键盘布局…").into()),
             },
         ));

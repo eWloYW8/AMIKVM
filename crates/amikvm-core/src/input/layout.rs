@@ -327,6 +327,46 @@ fn tables() -> &'static Tables {
     })
 }
 
+/// Match native normal/Shift glyphs by physical position, including JIS keys.
+/// Identical supported tables stay ambiguous rather than choosing arbitrarily.
+pub fn from_glyphs(observed: &[(&str, bool, char)]) -> Vec<Layout> {
+    let mut glyphs = std::collections::BTreeMap::new();
+    for &(code, shift, glyph) in observed {
+        if glyph.is_control() {
+            continue;
+        }
+        if glyphs
+            .insert((code, shift), glyph)
+            .is_some_and(|old| old != glyph)
+        {
+            return vec![];
+        }
+    }
+    ALL.into_iter()
+        .filter(|layout| layout.physical())
+        .filter(|layout| {
+            let mut total = 0;
+            let mut matching = 0;
+            for (&(code, shift), &glyph) in &glyphs {
+                if !positions(*layout).contains(&code) {
+                    continue;
+                }
+                let Some(caption) = layout.caption(code, shift, false, false) else {
+                    continue;
+                };
+                let mut characters = caption.chars();
+                let expected = characters.next();
+                if expected.is_none() || characters.next().is_some() {
+                    continue;
+                }
+                total += 1;
+                matching += usize::from(expected == Some(glyph));
+            }
+            total >= 60 && matching * 100 >= total * 95
+        })
+        .collect()
+}
+
 pub fn from_windows(id: &str) -> Option<Layout> {
     Some(match id.to_ascii_uppercase().as_str() {
         "00000409" => Layout::Us,
