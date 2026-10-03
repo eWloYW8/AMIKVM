@@ -76,11 +76,10 @@ if (platform === 'macos') {
     cpSync(join(root, 'vendor', 'fatfs', 'LICENSE.txt'), join(folder, 'LICENSE-fatfs.txt'));
     cpSync(join(root, 'vendor', 'fatfs', 'AMIKVM-CHANGES.md'), join(folder, 'FAT-CHANGES.md'));
     writeFileSync(join(folder, 'README.txt'), 'AMIKVM\n\nRun ./AMIKVM from this directory.\nRequires GTK 3 and WebKitGTK 4.1 provided by your Linux distribution.\n');
-    const name = `AMIKVM-${version}-linux-${architecture}.tar`;
-    run('tar', ['-cf', join(temporary, name), '-C', temporary, 'AMIKVM']);
-    const destination = join(output, `${name}.zip`);
-    rmSync(destination, { force: true });
-    run('zip', ['-j', destination, join(temporary, name)]);
+    const name = `AMIKVM-${version}-linux-${architecture}.tar.gz`;
+    run('tar', ['-czf', join(temporary, name), '-C', temporary, 'AMIKVM']);
+    const destination = join(output, name);
+    cpSync(join(temporary, name), destination);
     console.log(`Created ${destination}`);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }
