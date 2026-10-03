@@ -2,6 +2,7 @@ use super::{MAX_TRANSFER, Packet};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::VecDeque,
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::Path,
@@ -25,6 +26,7 @@ pub struct Image {
     ejected: bool,
     prevent: bool,
     attention: bool,
+    media_events: VecDeque<u8>,
     sense: [u8; 3],
     cache: Option<super::cache::ReadAhead>,
     cache_attempted: bool,
@@ -86,6 +88,11 @@ impl Image {
             ejected: false,
             prevent: false,
             attention: true,
+            media_events: if kind == Kind::Cdrom {
+                VecDeque::from([2])
+            } else {
+                VecDeque::new()
+            },
             sense: [0; 3],
             cache: None,
             cache_attempted: false,
@@ -124,6 +131,14 @@ impl Image {
             ejected: false,
             prevent: false,
             attention: opened.changed || kind != Kind::Cdrom,
+            media_events: if kind == Kind::Cdrom
+                && !super::device::optical_supported(0x4a)
+                && blocks != 0
+            {
+                VecDeque::from([2])
+            } else {
+                VecDeque::new()
+            },
             sense: [0; 3],
             cache: None,
             cache_attempted: true,
@@ -154,13 +169,15 @@ impl Image {
                     self.removed = true;
                     return None;
                 }
-                if changed {
+                let resized =
+                    self.blocks * u64::from(self.block_size) != length || self.block_size != sector;
+                if changed || resized {
                     self.attention = true;
+                    self.notify_media_event(if length == 0 { 3 } else { 2 });
                 }
-                if self.blocks * u64::from(self.block_size) != length || self.block_size != sector {
+                if resized {
                     self.blocks = length / u64::from(sector);
                     self.block_size = sector;
-                    self.attention = true;
                     if let Some(track) = self.tracks.first_mut() {
                         track.blocks = self.blocks;
                         track.sector_size = sector.try_into().unwrap_or(2048);
@@ -169,6 +186,45 @@ impl Image {
             }
         }
         Some(self.blocks * u64::from(self.block_size))
+    }
+    fn notify_media_event(&mut self, event: u8) {
+        // Native GESN maintains its own event queue. Only image and BSD
+        // fallback notifications are generated here, independently of sense.
+        if self.kind == Kind::Cdrom
+            && (self.physical.is_none() || !super::device::optical_supported(0x4a))
+        {
+            self.media_events.push_back(event);
+        }
+    }
+    fn event_status(&mut self, cdb: &[u8]) -> std::result::Result<Vec<u8>, [u8; 3]> {
+        if self.kind != Kind::Cdrom {
+            return Err([5, 0x20, 0]);
+        }
+        // Only polling is supported; the remaining fields are reserved in MMC.
+        if cdb[1] != 1 || cdb[2..4] != [0, 0] || cdb[4] & 0x81 != 0 || cdb[5..7] != [0, 0] {
+            return Err([5, 0x24, 0]);
+        }
+        let allocation = u16::from_be_bytes([cdb[7], cdb[8]]) as usize;
+        let mut data = if cdb[4] & 16 == 0 {
+            vec![0, 2, 0x80, 16]
+        } else {
+            let event = self.media_events.front().copied().unwrap_or(0);
+            let status = if self.ejected {
+                1
+            } else if self.blocks == 0 {
+                0
+            } else {
+                2
+            };
+            // MMC considers an event reported once any descriptor byte is
+            // transferred. Header-only queries must preserve the queued event.
+            if allocation > 4 {
+                self.media_events.pop_front();
+            }
+            vec![0, 6, 4, 16, event, status, 0, 0]
+        };
+        data.truncate(allocation);
+        Ok(data)
     }
     fn ready(&mut self) -> std::result::Result<(), [u8; 3]> {
         if self.ejected || self.removed || self.blocks == 0 {
@@ -249,7 +305,11 @@ impl Image {
             self.cache = super::cache::ReadAhead::new(&self.file, &self.tracks, self.blocks).ok();
         }
         if let Some(cache) = self.cache.as_mut() {
-            return cache.read(lba, count);
+            let result = cache.read(lba, count);
+            if matches!(result, Err([6, 0x28, 0])) {
+                self.notify_media_event(2);
+            }
+            return result;
         }
         let mut data = vec![0; length];
         let mut completed = 0;
@@ -600,8 +660,14 @@ impl Image {
                         if self.prevent {
                             return Err([5, 0x53, 2]);
                         }
+                        if !self.ejected {
+                            self.notify_media_event(3);
+                        }
                         self.ejected = true;
                     } else {
+                        if self.ejected {
+                            self.notify_media_event(2);
+                        }
                         self.ejected = false;
                         self.attention = true;
                     }
@@ -647,18 +713,7 @@ impl Image {
                 data
             }
             0x46 => self.configuration(cdb)?,
-            0x4a => {
-                if self.kind != Kind::Cdrom || cdb[1] & 1 == 0 {
-                    return Err([5, 0x24, 0]);
-                }
-                let mut data = if cdb[4] & 16 != 0 {
-                    vec![0, 6, 4, 16, 0, if self.ejected { 1 } else { 2 }, 0, 0]
-                } else {
-                    vec![0, 2, 0x80, 16]
-                };
-                data.truncate(be16(7) as usize);
-                data
-            }
+            0x4a => self.event_status(cdb)?,
             0x35 => {
                 self.file.sync_data().map_err(|_| [3, 0x0c, 2])?;
                 vec![]
