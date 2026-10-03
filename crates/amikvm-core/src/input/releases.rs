@@ -82,8 +82,9 @@ impl<T> Releases<T> {
         }
         previous
     }
-    /// A normal toolkit release already delivers this cycle; never duplicate it.
-    pub fn delivered(&mut self, hardware: u16, time: u32) {
+    /// Restore earlier missing releases before this normal toolkit release.
+    /// The toolkit already delivers this cycle; never duplicate its release.
+    pub fn delivered(&mut self, hardware: u16, time: u32) -> Vec<(T, u32)> {
         let exact = self
             .frames
             .iter()
@@ -95,9 +96,14 @@ impl<T> Releases<T> {
                     && time.wrapping_sub(f.time) < (1 << 31)
             })
         });
-        if let Some(index) = index {
-            self.frames.remove(index);
-        }
+        let order =
+            index.and_then(|index| self.frames.remove(index).released.map(|(_, order)| order));
+        self.take(|released, released_order| {
+            order.map_or_else(
+                || time != released && time.wrapping_sub(released) < (1 << 31),
+                |order| order.wrapping_sub(released_order) < (1 << 63),
+            )
+        })
     }
     /// Drain after the toolkit's pending events have been dispatched.
     pub fn drain(&mut self) -> Vec<(T, u32)> {

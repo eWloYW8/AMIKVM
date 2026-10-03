@@ -114,10 +114,13 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
                 // Cancellation already supplied the old device's releases.
                 return glib::Propagation::Stop;
             }
-            released
+            let releases = released
                 .keys
                 .borrow_mut()
                 .delivered(event.hardware_keycode(), event.time());
+            // A mapped key-up can arrive before idle compensation. Preserve
+            // physical release order, including an immediately released modifier.
+            released.deliver(releases);
         }
         glib::Propagation::Proceed
     });
