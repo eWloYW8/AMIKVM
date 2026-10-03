@@ -71,6 +71,12 @@ pub struct Snapshot {
     pub bandwidth_requested: Option<std::time::Instant>,
     pub own_session_id: Option<u8>,
     pub users: Vec<amikvm_core::sharing::User>,
+    pub remote_macros: Option<input::macros::RemoteMacros>,
+    pub remote_macro_message: Option<String>,
+    #[serde(skip)]
+    remote_macro_requested: Option<std::time::Instant>,
+    #[serde(skip)]
+    remote_macro_expected: Option<(u8, Vec<u8>)>,
     pub sharing: amikvm_core::sharing::State,
     pub recording: bool,
     pub recording_paused: bool,
@@ -129,6 +135,10 @@ impl Snapshot {
             bandwidth_requested: None,
             own_session_id: None,
             users: vec![],
+            remote_macros: None,
+            remote_macro_message: None,
+            remote_macro_requested: None,
+            remote_macro_expected: None,
             sharing: amikvm_core::sharing::State::default(),
             recording: false,
             recording_paused: false,
@@ -142,6 +152,9 @@ impl Snapshot {
             recording_skipped_ms: 0,
             media: vec![],
         }
+    }
+    pub fn remote_macros_busy(&self) -> bool {
+        self.remote_macro_requested.is_some()
     }
 }
 
@@ -168,6 +181,10 @@ pub struct Session {
 enum Outgoing {
     Bytes(Vec<u8>),
     Refresh,
+    RemoteMacro {
+        edit: input::macros::RemoteMacroEdit,
+        reply: oneshot::Sender<Result<()>>,
+    },
     Power {
         operation: protocol::PowerOperation,
         reply: oneshot::Sender<Result<()>>,
@@ -394,6 +411,10 @@ impl Session {
                     s.host_display_supported = None;
                     s.host_display = None;
                     s.video_config = None;
+                    s.remote_macros = None;
+                    s.remote_macro_requested = None;
+                    s.remote_macro_expected = None;
+                    s.remote_macro_message = None;
                     s.input_throttled_until = None;
                     if s.recovery.attempt > 0 {
                         s.recovery.authenticating();
@@ -495,6 +516,42 @@ impl Session {
                                             break 'writer Err(error);
                                         }
                                     }
+                                },
+                                Some(Outgoing::RemoteMacro { edit, reply }) => {
+                                    let prepared = (|| {
+                                        let snapshot = writer_snapshot.lock().map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                        if !writer_ready.load(Ordering::Acquire) || !snapshot.video_connected {
+                                            return Err(Error::Invalid("Session is not connected".into()));
+                                        }
+                                        if !snapshot.can_control {
+                                            return Err(Error::Authentication("Control permission is required".into()));
+                                        }
+                                        if snapshot.remote_macro_requested.is_some() {
+                                            return Err(Error::Invalid("正在等待服务器确认组合键配置".into()));
+                                        }
+                                        let config = snapshot.remote_macros.as_ref()
+                                            .ok_or_else(|| Error::Invalid("服务器尚未返回组合键配置".into()))?
+                                            .change(&edit)?;
+                                        Ok((config.packet()?, config.slot_bytes(edit.slot)?))
+                                    })();
+                                    let (bytes, expected) = match prepared {
+                                        Ok(bytes) => bytes,
+                                        Err(error) => { let _ = reply.send(Err(error)); continue; }
+                                    };
+                                    // Mark pending before writing, so a quick IVTP 40 reply
+                                    // cannot be overwritten by a later local prediction.
+                                    update(&writer_app, &writer_snapshot, |s| {
+                                        s.remote_macro_requested = Some(std::time::Instant::now());
+                                        s.remote_macro_expected = Some((edit.slot, expected));
+                                        s.remote_macro_message = Some("配置已发送，等待服务器返回".into());
+                                    });
+                                    for bytes in [bytes, protocol::command(40, 0)] {
+                                        if let Err(error) = transport::write_packet(&mut writer, &bytes).await {
+                                            let _ = reply.send(Err(Error::Protocol(error.to_string())));
+                                            break 'writer Err(error);
+                                        }
+                                    }
+                                    let _ = reply.send(Ok(()));
                                 },
                                 Some(Outgoing::Power { operation, reply }) => {
                                     let prepared = (|| {
@@ -756,9 +813,15 @@ impl Session {
                                     let ipmi_changed = snapshot.ipmi.expire(now);
                                     let sharing_changed = snapshot.sharing.expire(now);
                                     let power_changed = snapshot.power.expire(now);
+                                    let macro_changed = snapshot.remote_macro_requested.is_some_and(|started| started.elapsed() >= Duration::from_secs(10));
+                                    if macro_changed {
+                                        snapshot.remote_macro_requested = None;
+                                        snapshot.remote_macro_expected = None;
+                                        snapshot.remote_macro_message = Some("服务器未确认保存结果，请刷新后检查".into());
+                                    }
                                     query_power = approved && snapshot.power.query_due(now);
                                     snapshot.can_control = snapshot.sharing.can_control();
-                                    if ipmi_changed || sharing_changed || power_changed {
+                                    if ipmi_changed || sharing_changed || power_changed || macro_changed {
                                         crate::diagnostics::session(&app, &snapshot);
                                         let _ = app.emit("session-state", snapshot.clone());
                                     }
@@ -1105,6 +1168,33 @@ impl Session {
                             }
                             update(&app, &worker_snapshot, |_| {});
                         }
+                        40 => {
+                            let config = input::macros::RemoteMacros::parse(&body);
+                            update(&app, &worker_snapshot, |s| {
+                                match config {
+                                    Ok(config) => {
+                                        if let Some((slot, expected)) = &s.remote_macro_expected {
+                                            if config.slot_bytes(*slot).is_ok_and(|bytes| bytes == *expected) {
+                                                s.remote_macro_requested = None;
+                                                s.remote_macro_expected = None;
+                                                s.remote_macro_message = Some("服务器组合键已保存并重新读取确认".into());
+                                            } else {
+                                                s.remote_macro_message = Some("服务器返回的组合键与请求不一致".into());
+                                            }
+                                        } else {
+                                            s.remote_macro_message = None;
+                                        }
+                                        s.remote_macros = Some(config);
+                                    }
+                                    Err(error) => {
+                                        s.remote_macros = None;
+                                        s.remote_macro_requested = None;
+                                        s.remote_macro_expected = None;
+                                        s.remote_macro_message = Some(error.to_string());
+                                    }
+                                }
+                            });
+                        }
                         39 => {
                             let users = amikvm_core::sharing::users(&body)?;
                             update(&app, &worker_snapshot, |s| s.users = users);
@@ -1240,6 +1330,10 @@ impl Session {
                     s.power.close();
                     s.sharing.close();
                     s.users.clear();
+                    s.remote_macros = None;
+                    s.remote_macro_requested = None;
+                    s.remote_macro_expected = None;
+                    s.remote_macro_message = None;
                     s.mouse.context(
                         s.mouse_mode == Some(1),
                         false,
@@ -1611,6 +1705,29 @@ impl Session {
     }
     pub fn can_record(&self) -> bool {
         self.ready.load(Ordering::Acquire)
+    }
+
+    pub async fn configure_remote_macro(&self, edit: input::macros::RemoteMacroEdit) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        let (reply, result) = oneshot::channel();
+        self.sender
+            .send(Outgoing::RemoteMacro { edit, reply })
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))?;
+        result
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))?
+    }
+    pub async fn refresh_remote_macros(&self) -> Result<()> {
+        if !self.ready.load(Ordering::Acquire) {
+            return Err(Error::Invalid("Session is not connected".into()));
+        }
+        self.sender
+            .send(Outgoing::Bytes(protocol::command(40, 0)))
+            .await
+            .map_err(|_| Error::Protocol("Connection closed".into()))
     }
 
     pub fn sharing_policy(&self, policy: amikvm_core::sharing::Policy) -> Result<()> {

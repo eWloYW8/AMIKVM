@@ -1,7 +1,9 @@
 //! JViewer user macros are simultaneous key chords (20 entries, six keys each).
 //! Persistence and USB conversion are independent of the webview and JVM formats.
+mod remote;
 use super::{Keyboard, usage};
 use crate::{Error, Result};
+pub use remote::{RemoteMacro, RemoteMacroEdit, RemoteMacros, remote_catalogue};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, fs, io::Write, path::PathBuf};
 use uuid::Uuid;

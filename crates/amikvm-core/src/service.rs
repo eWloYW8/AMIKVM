@@ -78,6 +78,11 @@ fn changes(before: &[Service], after: &[Service]) -> Vec<Change> {
     // empty/reserved slots must not be mistaken for a malformed packet.
     let mut result = vec![];
     for (slot, (old, new)) in before.iter().zip(after).enumerate() {
+        // KVMClient.a(ConfPkt, slot) ignores web notifications in standalone
+        // credential sessions. They cannot invalidate our KVM/media sockets.
+        if new.name.eq_ignore_ascii_case("web") {
+            continue;
+        }
         let mut fields = vec![];
         for (changed, name) in [
             (old.name != new.name, "服务名称"),
@@ -205,13 +210,11 @@ impl State {
         };
         let close = changed.iter().any(|c| {
             c.service.eq_ignore_ascii_case("kvm")
-                || c.service.eq_ignore_ascii_case("web")
                 || self.services[c.slot].name.eq_ignore_ascii_case("kvm")
-                || self.services[c.slot].name.eq_ignore_ascii_case("web")
         });
-        let media_changed = changed.iter().any(|c| {
-            c.service.eq_ignore_ascii_case("cd-media") || c.service.eq_ignore_ascii_case("hd-media")
-        });
+        // ConfPkt.aG calls iP(), stopping all active redirection instances for
+        // any effective service change, including interface/timeout changes.
+        let media_changed = !changed.is_empty();
         if media_changed {
             for change in &changed {
                 let service = &next[change.slot];
@@ -240,9 +243,9 @@ impl State {
         if !changed.is_empty() {
             self.changes = changed;
             self.notice = Some(if close {
-                "KVM 或 Web 服务配置已改变，请重新连接服务器。"
+                "KVM 服务配置已改变，请重新连接服务器。"
             } else if media_changed {
-                "虚拟介质服务配置已改变，活动重定向已停止。"
+                "服务器服务配置已改变，活动重定向已停止。"
             } else {
                 "服务器服务配置已改变。"
             });

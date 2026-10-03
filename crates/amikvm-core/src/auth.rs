@@ -312,21 +312,31 @@ impl WebSession {
             )));
         }
         response.fields.checked()?;
-        let cookie = response
-            .cookie
-            .or_else(|| {
-                response.fields.text("SESSION_COOKIE").map(|cookie| {
-                    // StandAloneConnectionDialog keeps RPC SESSION_COOKIE
-                    // raw for IVTP 21 and the single-port gateway. Only HTTP
-                    // requests add SessionCookie= (see http_cookie).
-                    if mode == ApiMode::Rpc || cookie.starts_with("QSESSIONID=") {
+        let body_cookie = response.fields.text("SESSION_COOKIE");
+        let cookie = match mode {
+            // StandAloneConnectionDialog uses the RPC body's raw token for
+            // the single-port gateway, even if HTTP also sets QSESSIONID.
+            // Only HTTP requests add SessionCookie= (see http_cookie).
+            ApiMode::Rpc => body_cookie.or_else(|| {
+                response.cookie.map(|cookie| {
+                    cookie
+                        .strip_prefix("QSESSIONID=")
+                        .or_else(|| cookie.strip_prefix("SessionCookie="))
+                        .unwrap_or(&cookie)
+                        .to_owned()
+                })
+            }),
+            _ => response.cookie.or_else(|| {
+                body_cookie.map(|cookie| {
+                    if cookie.starts_with("QSESSIONID=") {
                         cookie
                     } else {
                         format!("QSESSIONID={cookie}")
                     }
                 })
-            })
-            .ok_or_else(|| Error::Authentication("BMC did not return a session cookie".into()))?;
+            }),
+        }
+        .ok_or_else(|| Error::Authentication("BMC did not return a session cookie".into()))?;
         if cookie.contains(['\r', '\n']) {
             return Err(Error::Protocol("Invalid session cookie".into()));
         }

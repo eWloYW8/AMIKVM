@@ -42,6 +42,8 @@ pub enum Dialog {
     FolderSync(Uuid),
     Macros(Option<Uuid>),
     MacroEdit(Option<Uuid>, Option<Uuid>),
+    RemoteMacros(Uuid),
+    RemoteMacroEdit(Uuid, u8, Vec<u8>),
     Recordings(Uuid),
     Captures(Uuid),
     Ipmi(Uuid),
@@ -263,6 +265,31 @@ pub enum Intent {
     MacroRun {
         id: Uuid,
         macro_id: Uuid,
+    },
+    RemoteMacroDialog {
+        id: Uuid,
+    },
+    RemoteMacroRefresh {
+        id: Uuid,
+    },
+    RemoteMacroEdit {
+        id: Uuid,
+        slot: Option<u8>,
+    },
+    RemoteMacroSave {
+        id: Uuid,
+        slot: u8,
+        expected: Vec<u8>,
+        values: Value,
+    },
+    RemoteMacroRemove {
+        id: Uuid,
+        slot: u8,
+        expected: Vec<u8>,
+    },
+    RemoteMacroRun {
+        id: Uuid,
+        slot: u8,
     },
     SoftKeyboard {
         id: Uuid,
@@ -1466,6 +1493,145 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 .get(&id)
                 .cloned()
                 .ok_or("Session not found")?;
+            session.tap(report).await.map_err(|e| e.to_string())?;
+        }
+        Intent::RemoteMacroDialog { id } => {
+            state
+                .ui
+                .lock()
+                .map_err(|_| "Interface state unavailable")?
+                .dialog = Dialog::RemoteMacros(id);
+        }
+        Intent::RemoteMacroEdit { id, slot } => {
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            let (slot, expected) = {
+                let snapshot = session.snapshot.lock().map_err(|_| "Session unavailable")?;
+                if !snapshot.video_connected
+                    || !snapshot.can_control
+                    || snapshot.remote_macros_busy()
+                {
+                    return Err("当前不能编辑服务器组合键".into());
+                }
+                let config = snapshot
+                    .remote_macros
+                    .as_ref()
+                    .ok_or("服务器尚未返回组合键配置")?;
+                let slot = if let Some(slot) = slot {
+                    if !config.get(slot).map_err(|e| e.to_string())?.supported {
+                        return Err("服务器组合键包含未支持的按键，不能直接编辑".into());
+                    }
+                    slot
+                } else {
+                    config.vacant().ok_or("服务器最多保存 20 个组合键")?
+                };
+                (slot, config.slot_bytes(slot).map_err(|e| e.to_string())?)
+            };
+            state
+                .ui
+                .lock()
+                .map_err(|_| "Interface state unavailable")?
+                .dialog = Dialog::RemoteMacroEdit(id, slot, expected);
+        }
+        Intent::RemoteMacroSave {
+            id,
+            slot,
+            expected,
+            values,
+        } => {
+            let codes = (0..amikvm_core::input::macros::MAX_KEYS)
+                .map(|i| text(&values, &format!("key{i}")))
+                .filter(|s| !s.is_empty())
+                .collect();
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session
+                .configure_remote_macro(amikvm_core::input::macros::RemoteMacroEdit {
+                    slot,
+                    expected,
+                    codes: Some(codes),
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            state
+                .ui
+                .lock()
+                .map_err(|_| "Interface state unavailable")?
+                .dialog = Dialog::RemoteMacros(id);
+        }
+        Intent::RemoteMacroRemove { id, slot, expected } => {
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session
+                .configure_remote_macro(amikvm_core::input::macros::RemoteMacroEdit {
+                    slot,
+                    expected,
+                    codes: None,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        Intent::RemoteMacroRefresh { id } => {
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            session
+                .refresh_remote_macros()
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        Intent::RemoteMacroRun { id, slot } => {
+            let session = state
+                .sessions
+                .lock()
+                .await
+                .get(&id)
+                .cloned()
+                .ok_or("Session not found")?;
+            let report = {
+                let snapshot = session.snapshot.lock().map_err(|_| "Session unavailable")?;
+                let layout = snapshot
+                    .config
+                    .as_ref()
+                    .map(|c| c.keyboard_layout.as_str())
+                    .unwrap_or("AD");
+                let layout = if layout == "AD" {
+                    state
+                        .host_keyboard
+                        .snapshot
+                        .lock()
+                        .ok()
+                        .and_then(|s| s.layout)
+                } else {
+                    amikvm_core::input::layout::Layout::parse(layout).ok()
+                };
+                snapshot
+                    .remote_macros
+                    .as_ref()
+                    .ok_or("服务器尚未返回组合键配置")?
+                    .get(slot)
+                    .and_then(|m| m.report_for_layout(layout))
+                    .map_err(|e| e.to_string())?
+            };
             session.tap(report).await.map_err(|e| e.to_string())?;
         }
         Intent::SoftKeyboard { id } => {

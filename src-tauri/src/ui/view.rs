@@ -1447,12 +1447,162 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 rows.push(row);
             }
             children.push(group("div", "macro-list", rows));
+            if let Some(id) = id {
+                children.push(button(
+                    "button secondary",
+                    tr("服务器组合键"),
+                    "Server",
+                    json!({"action":"remote_macro_dialog","id":id}),
+                    !sessions
+                        .iter()
+                        .any(|s| s.server_id == id && s.video_connected),
+                ));
+            }
             (
                 format!("macros-{id:?}"),
                 "modal",
                 json!({"action":"close_dialog"}),
                 json!({}),
                 children,
+            )
+        }
+        Dialog::RemoteMacros(id) => {
+            let snapshot = sessions.iter().find(|s| s.server_id == id);
+            let config = snapshot.and_then(|s| s.remote_macros.as_ref());
+            let writable = snapshot
+                .is_some_and(|s| s.video_connected && s.can_control && !s.remote_macros_busy());
+            let connected = snapshot.is_some_and(|s| s.video_connected);
+            let mut children = vec![
+                heading(tr("服务器组合键"), "Keyboard"),
+                group(
+                    "div",
+                    "macro-actions",
+                    vec![
+                        button(
+                            "button primary",
+                            tr("添加组合键"),
+                            "Plus",
+                            json!({"action":"remote_macro_edit","id":id,"slot":null}),
+                            !writable || config.is_none_or(|c| c.vacant().is_none()),
+                        ),
+                        button(
+                            "button secondary",
+                            tr("刷新"),
+                            "RefreshCw",
+                            json!({"action":"remote_macro_refresh","id":id}),
+                            !connected,
+                        ),
+                        button(
+                            "button secondary",
+                            tr("本地组合键"),
+                            "Keyboard",
+                            json!({"action":"macro_dialog","id":id}),
+                            false,
+                        ),
+                    ],
+                ),
+            ];
+            if let Some(message) = snapshot.and_then(|s| s.remote_macro_message.as_ref()) {
+                children.push(label("span", "status", message));
+            }
+            let mut rows = vec![];
+            if let Some(config) = config {
+                for m in &config.entries {
+                    let mut remove = titled(
+                        "X",
+                        tr("删除组合键"),
+                        json!({"action":"remote_macro_remove","id":id,"slot":m.slot,"expected":config.slot_bytes(m.slot).unwrap_or_default()}),
+                        !writable,
+                    );
+                    remove.props["confirm"] = json!(lformat!("删除服务器组合键“{}”？", m.name));
+                    let mut row = group(
+                        "div",
+                        "macro-row",
+                        vec![
+                            group("div", "macro-content", vec![label("strong", "", &m.name)]),
+                            group(
+                                "div",
+                                "macro-actions",
+                                vec![
+                                    button(
+                                        "button secondary",
+                                        tr("发送"),
+                                        "",
+                                        json!({"action":"remote_macro_run","id":id,"slot":m.slot}),
+                                        !writable || !m.supported,
+                                    ),
+                                    button(
+                                        "button secondary",
+                                        tr("编辑"),
+                                        "",
+                                        json!({"action":"remote_macro_edit","id":id,"slot":m.slot}),
+                                        !writable || !m.supported,
+                                    ),
+                                    remove,
+                                ],
+                            ),
+                        ],
+                    );
+                    row.props["key"] = json!(m.slot);
+                    rows.push(row);
+                }
+            }
+            children.push(group("div", "macro-list", rows));
+            (
+                format!("remote-macros-{id}"),
+                "modal",
+                json!({"action":"close_dialog"}),
+                json!({}),
+                children,
+            )
+        }
+        Dialog::RemoteMacroEdit(id, slot, ref expected) => {
+            let entry = sessions
+                .iter()
+                .find(|s| s.server_id == id)
+                .and_then(|s| s.remote_macros.as_ref())
+                .and_then(|c| c.entries.iter().find(|m| m.slot == slot));
+            let choices = amikvm_core::input::macros::remote_catalogue();
+            let mut values = json!({});
+            let mut fields = vec![];
+            for i in 0..amikvm_core::input::macros::MAX_KEYS {
+                values[format!("key{i}")] = json!(
+                    entry
+                        .and_then(|m| m.codes.get(i))
+                        .map_or("", String::as_str)
+                );
+                let mut field = field(
+                    &format!("key{i}"),
+                    &lformat!("按键 {}", i + 1),
+                    "select",
+                    json!({}),
+                );
+                let mut options = vec![json!({"value":"","label":tr("未设置")})];
+                options.extend(
+                    choices
+                        .iter()
+                        .map(|(code, name)| json!({"value":code,"label":name})),
+                );
+                field.props["options"] = json!(options);
+                fields.push(field);
+            }
+            (
+                format!("remote-macro-edit-{id}-{slot}"),
+                "modal",
+                json!({"action":"remote_macro_save","id":id,"slot":slot,"expected":expected}),
+                values,
+                vec![
+                    heading(
+                        if entry.is_some() {
+                            tr("编辑服务器组合键")
+                        } else {
+                            tr("添加服务器组合键")
+                        },
+                        "Keyboard",
+                    ),
+                    group("div", "form-grid", fields),
+                    actions(tr("保存组合键")),
+                ],
             )
         }
         Dialog::MacroEdit(id, macro_id) => {
