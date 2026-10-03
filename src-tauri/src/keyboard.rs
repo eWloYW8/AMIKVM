@@ -4,6 +4,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 pub mod locks;
 pub mod native;
+#[cfg(target_os = "linux")]
+mod wayland;
 
 #[derive(Default, Clone, PartialEq)]
 pub struct Snapshot {
@@ -37,6 +39,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     {
         use gtk::prelude::*;
         if let Some(window) = app.get_webview_window("main") {
+            wayland::install(window.gtk_window()?.upcast_ref());
             let handle = app.clone();
             window
                 .gtk_window()?

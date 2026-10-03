@@ -12,6 +12,7 @@ pub mod macros;
 pub mod mouse;
 pub mod physical;
 pub mod pointer;
+pub mod releases;
 pub mod routing;
 
 #[derive(Deserialize)]
