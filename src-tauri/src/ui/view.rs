@@ -2438,24 +2438,75 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
     );
     let mut powers = vec![];
     let power_allowed = controllable && config.is_some_and(|c| c.privileges & 256 != 0);
+    let power = snapshot.map(|s| &s.power);
+    use amikvm_core::protocol::PowerOperation;
     for (operation, title) in [
-        ("on", tr("开机")),
-        ("shutdown", tr("正常关机")),
-        ("reset", tr("重启")),
-        ("cycle", tr("电源循环")),
-        ("off", tr("强制关机")),
+        (PowerOperation::On, tr("开机")),
+        (PowerOperation::Shutdown, tr("正常关机")),
+        (PowerOperation::Reset, tr("重启")),
+        (PowerOperation::Cycle, tr("电源循环")),
+        (PowerOperation::Off, tr("强制关机")),
     ] {
         let mut b = button(
             "",
             title,
             "",
             control(json!({"action":"power","operation":operation})),
-            !power_allowed,
+            !power_allowed || !power.is_some_and(|p| p.available(operation)),
         );
-        if operation != "on" {
-            b.props["confirm"] = json!(lformat!("对 {} 执行“{title}”？", s.name, title = title));
-        }
+        b.props["confirm"] = json!(lformat!("对 {} 执行“{title}”？", s.name, title = title));
         powers.push(b);
+    }
+    let mut power_children = vec![
+        group(
+            "div",
+            "section-label",
+            vec![
+                icon("Power", 15),
+                label("span", "", tr("服务器电源")),
+                label(
+                    "span",
+                    "push-right power-state",
+                    match power.and_then(|p| p.status) {
+                        Some(1) => tr("已开机"),
+                        Some(0) => tr("已关机"),
+                        _ => tr("未知"),
+                    },
+                ),
+            ],
+        ),
+        group("div", "power-grid", powers),
+        button(
+            "button secondary wide",
+            if power.is_some_and(|p| p.query_pending) {
+                tr("正在查询电源状态")
+            } else {
+                tr("刷新电源状态")
+            },
+            "RefreshCw",
+            control(json!({"action":"power_status"})),
+            !connected || power.is_some_and(|p| p.query_pending),
+        ),
+    ];
+    if let Some(power) = power {
+        if power.phase != amikvm_core::power::Phase::Idle {
+            power_children.push(label("p", "help", translated(power.phase.label())));
+        }
+        if power.phase == amikvm_core::power::Phase::Rejected {
+            if let Some(code) = power.response_code {
+                power_children.push(label("p", "help", lformat!("回执状态码：{}", code)));
+            }
+        }
+        if power.waiting_for_off {
+            power_children.push(label(
+                "p",
+                "help",
+                tr("等待服务器关机，正在重新查询电源状态"),
+            ));
+        }
+        if power.query_failed {
+            power_children.push(label("p", "help", tr("无法查询电源状态，可以重新刷新")));
+        }
     }
     let mut keyboard_children = vec![
         group(
@@ -2631,30 +2682,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                 media(s, snapshot),
                 folders(ui, s, snapshot),
                 recording(ui, s, snapshot),
-                group(
-                    "div",
-                    "panel-section",
-                    vec![
-                        group(
-                            "div",
-                            "section-label",
-                            vec![
-                                icon("Power", 15),
-                                label("span", "", tr("服务器电源")),
-                                label(
-                                    "span",
-                                    "push-right power-state",
-                                    match snapshot.and_then(|v| v.power) {
-                                        Some(1) => tr("已开机"),
-                                        Some(0) => tr("已关机"),
-                                        _ => tr("未知"),
-                                    },
-                                ),
-                            ],
-                        ),
-                        group("div", "power-grid", powers),
-                    ],
-                ),
+                group("div", "panel-section", power_children),
                 group(
                     "div",
                     "panel-section",

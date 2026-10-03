@@ -5,6 +5,7 @@ pub mod input;
 pub mod ipmi;
 pub mod media;
 pub mod playback;
+pub mod power;
 pub mod preferences;
 pub mod protocol;
 pub mod recording;

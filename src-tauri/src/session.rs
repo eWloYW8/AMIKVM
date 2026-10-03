@@ -31,7 +31,7 @@ pub struct Snapshot {
     pub phase: String,
     pub message: Option<String>,
     pub config: Option<SessionConfig>,
-    pub power: Option<u16>,
+    pub power: amikvm_core::power::State,
     pub mouse_mode: Option<u8>,
     pub mouse: input::mouse::State,
     pub lock_leds: u8,
@@ -90,7 +90,7 @@ impl Snapshot {
             phase: "authenticating".into(),
             message: None,
             config: None,
-            power: None,
+            power: Default::default(),
             mouse_mode: None,
             mouse: input::mouse::State::default(),
             lock_leds: 0,
@@ -164,6 +164,11 @@ pub struct Session {
 
 enum Outgoing {
     Bytes(Vec<u8>),
+    Power {
+        operation: protocol::PowerOperation,
+        reply: oneshot::Sender<Result<()>>,
+    },
+    PowerStatus,
     VideoConfig {
         setting: amikvm_core::video::config::Setting,
         reply: oneshot::Sender<Result<()>>,
@@ -381,6 +386,7 @@ impl Session {
                 worker_text_generation.send_modify(|value| *value = value.wrapping_add(1));
                 update(&app, &worker_snapshot, |s| {
                     s.service = Default::default();
+                    s.power = Default::default();
                     s.host_display_supported = None;
                     s.host_display = None;
                     s.video_config = None;
@@ -464,6 +470,46 @@ impl Session {
                                 },
                                 Some(Outgoing::Bytes(bytes)) => {
                                     if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                                },
+                                Some(Outgoing::Power { operation, reply }) => {
+                                    let prepared = (|| {
+                                        let mut snapshot = writer_snapshot.lock().map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                        if !writer_ready.load(Ordering::Acquire) || !snapshot.video_connected {
+                                            return Err(Error::Invalid("Session is not connected".into()));
+                                        }
+                                        if !snapshot.can_control {
+                                            return Err(Error::Authentication("Session has view-only permissions".into()));
+                                        }
+                                        if !snapshot.config.as_ref().is_some_and(|c| c.privileges & 256 != 0) {
+                                            return Err(Error::Authentication("This account has no server power privilege".into()));
+                                        }
+                                        let bytes = snapshot.power.begin(operation, std::time::Instant::now())?;
+                                        crate::diagnostics::session(&writer_app, &snapshot);
+                                        let _ = writer_app.emit("session-state", snapshot.clone());
+                                        Ok(bytes)
+                                    })();
+                                    let bytes = match prepared {
+                                        Ok(bytes) => bytes,
+                                        Err(error) => { let _ = reply.send(Err(error)); continue; }
+                                    };
+                                    if let Err(error) = transport::write_packet(&mut writer, &bytes).await {
+                                        let _ = reply.send(Err(Error::Protocol(error.to_string()))); break Err(error);
+                                    }
+                                    let _ = reply.send(Ok(()));
+                                },
+                                Some(Outgoing::PowerStatus) => {
+                                    let bytes = if let Ok(mut snapshot) = writer_snapshot.lock() {
+                                        if !snapshot.video_connected { continue; }
+                                        let bytes = snapshot.power.query(std::time::Instant::now());
+                                        if bytes.is_some() {
+                                            crate::diagnostics::session(&writer_app, &snapshot);
+                                            let _ = writer_app.emit("session-state", snapshot.clone());
+                                        }
+                                        bytes
+                                    } else { None };
+                                    if let Some(bytes) = bytes {
+                                        if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                                    }
                                 },
                                 Some(Outgoing::VideoConfig { setting, reply }) => {
                                     let prepared = (|| {
@@ -676,15 +722,21 @@ impl Session {
                                 if !approved && authentication_started.elapsed() >= Duration::from_secs(30) {
                                     return Err(Error::Timeout("KVM authentication"));
                                 }
+                                let mut query_power = false;
                                 if let Ok(mut snapshot) = worker_snapshot.lock() {
                                     let now = std::time::Instant::now();
                                     let ipmi_changed = snapshot.ipmi.expire(now);
                                     let sharing_changed = snapshot.sharing.expire(now);
+                                    let power_changed = snapshot.power.expire(now);
+                                    query_power = approved && snapshot.power.query_due(now);
                                     snapshot.can_control = snapshot.sharing.can_control();
-                                    if ipmi_changed || sharing_changed {
+                                    if ipmi_changed || sharing_changed || power_changed {
                                         crate::diagnostics::session(&app, &snapshot);
                                         let _ = app.emit("session-state", snapshot.clone());
                                     }
+                                }
+                                if query_power {
+                                    worker_sender.send(Outgoing::PowerStatus).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                                 }
                             }
                             read = &mut packet_future => break read,
@@ -785,7 +837,6 @@ impl Session {
                                 worker_sender.send(Outgoing::Bytes(web.cookie_packet()?)).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                             }
                             for bytes in [
-                                protocol::command(34, 0),
                                 protocol::packet(51, 0, &[2])?,
                                 protocol::command(40, 0),
                                 protocol::command(39, 0),
@@ -809,6 +860,7 @@ impl Session {
                                 s.can_control = s.sharing.can_control();
                                 s.own_session_id = body.get(1).copied();
                             });
+                            worker_sender.send(Outgoing::PowerStatus).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                             worker_ready.store(true, Ordering::Release);
                         }
                         9 => {
@@ -1013,8 +1065,13 @@ impl Session {
                             let users = amikvm_core::sharing::users(&body)?;
                             update(&app, &worker_snapshot, |s| s.users = users);
                         }
-                        34 if header.status != 100 => {
-                            update(&app, &worker_snapshot, |s| s.power = Some(header.status))
+                        34 if approved => {
+                            update(&app, &worker_snapshot, |s| s.power.status_reply(header.status, std::time::Instant::now()))
+                        }
+                        36 if approved => {
+                            update(&app, &worker_snapshot, |s| {
+                                s.power.acknowledge(header.status, std::time::Instant::now());
+                            });
                         }
                         52 if header.status <= 3 => update(&app, &worker_snapshot, |s| {
                             s.host_display = Some(header.status)
@@ -1112,6 +1169,7 @@ impl Session {
                     s.input_encryption = false;
                     s.encryption_required = false;
                     s.ipmi.close();
+                    s.power.close();
                     s.sharing.close();
                     s.users.clear();
                     s.mouse.context(
@@ -1202,6 +1260,7 @@ impl Session {
                 s.video_signal = false;
                 s.sharing.close();
                 s.ipmi.close();
+                s.power.close();
             });
             let _ = tokio::time::timeout(Duration::from_secs(2), session_web.logout()).await;
             let _ = finish_tx.send(true);
@@ -1299,6 +1358,23 @@ impl Session {
             return result
                 .await
                 .map_err(|_| Error::Protocol("Connection closed".into()))?;
+        }
+        if let Control::Power { operation } = control {
+            let (reply, result) = oneshot::channel();
+            self.sender
+                .send(Outgoing::Power { operation, reply })
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            return result
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+        }
+        if matches!(control, Control::PowerStatus) {
+            self.sender
+                .send(Outgoing::PowerStatus)
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            return Ok(());
         }
         if let Control::InputEncryption { enabled } = control {
             self.input(Event::ReleaseAll).await?;

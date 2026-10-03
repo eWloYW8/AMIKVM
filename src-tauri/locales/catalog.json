@@ -1,4 +1,17 @@
 {
+  "尚未执行电源操作": ["No power operation has been requested", "Aucune opération d’alimentation demandée"],
+  "等待服务器确认电源操作": ["Waiting for the server to acknowledge the power operation", "En attente de l’accusé de réception du serveur"],
+  "服务器已确认电源操作": ["The server acknowledged the power operation", "Le serveur a confirmé l’opération d’alimentation"],
+  "服务器拒绝了电源操作": ["The server rejected the power operation", "Le serveur a refusé l’opération d’alimentation"],
+  "电源操作回执超时，结果未知；请重新连接后再操作": ["Power acknowledgement timed out; the result is unknown. Reconnect before another operation.", "Délai de réponse dépassé ; le résultat est inconnu. Reconnectez-vous avant une autre opération."],
+  "连接中断，电源操作结果未知": ["Connection interrupted; the power operation result is unknown", "Connexion interrompue ; le résultat de l’opération d’alimentation est inconnu"],
+  "已有电源操作正在等待服务器回执": ["A power operation is already waiting for a server acknowledgement", "Une opération d’alimentation attend déjà la réponse du serveur"],
+  "该电源操作不适用于服务器当前电源状态": ["This operation is unavailable in the server’s current power state", "Cette opération n’est pas disponible dans l’état d’alimentation actuel du serveur"],
+  "正在查询电源状态": ["Querying power status", "Interrogation de l’état d’alimentation"],
+  "刷新电源状态": ["Refresh power status", "Actualiser l’état d’alimentation"],
+  "回执状态码：{}": ["Acknowledgement status: {}", "Code de réponse : {}"],
+  "等待服务器关机，正在重新查询电源状态": ["Waiting for the server to power off; polling power status", "En attente de l’arrêt du serveur ; vérification de l’état d’alimentation"],
+  "无法查询电源状态，可以重新刷新": ["Power status could not be queried; refresh to try again", "Impossible d’obtenir l’état d’alimentation ; actualisez pour réessayer"],
   "正在登录": [
     "Logging in",
     "Connexion en cours"

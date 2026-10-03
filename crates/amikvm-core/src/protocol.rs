@@ -151,7 +151,7 @@ pub enum Control {
     Ipmi { command: Vec<u8>, request_id: u8 },
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PowerOperation {
     Off,
