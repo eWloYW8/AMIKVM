@@ -5,6 +5,7 @@ node_modules/
 target/
 dist/
 artifacts/
+.local-work/
 .DS_Store
 *.log
 .env

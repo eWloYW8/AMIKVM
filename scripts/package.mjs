@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -9,6 +8,9 @@ import { publishMacosBundle, validateMacosBundle } from './macos-bundle.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
+const temporaryRoot = join(root, '.local-work', 'tmp');
+mkdirSync(temporaryRoot, { recursive: true });
+Object.assign(process.env, { TMPDIR: temporaryRoot, TMP: temporaryRoot, TEMP: temporaryRoot });
 const { values } = parseArgs({ options: {
   target: { type: 'string' },
   runner: { type: 'string' },
@@ -65,7 +67,7 @@ if (platform === 'macos') {
   console.log(`Created ${destination}; ${info.imports.length} system DLL imports, no companion DLLs`);
 } else if (platform === 'linux') {
   run('pnpm', [...buildArguments, '--no-bundle']);
-  const temporary = mkdtempSync(join(tmpdir(), 'amikvm-package-'));
+  const temporary = mkdtempSync(join(temporaryRoot, 'amikvm-package-'));
   try {
     const folder = join(temporary, 'AMIKVM');
     mkdirSync(folder);
