@@ -1895,11 +1895,21 @@ impl Session {
         ) {
             self.focus(true);
         }
-        if let Event::Key { code, .. } = &event {
-            if let Ok(snapshot) = self.snapshot.lock() {
-                let id = snapshot.server_id;
-                drop(snapshot);
-                crate::keyboard::locks::physical_key(&self.input_app, id, code);
+        if let Event::Key {
+            code,
+            key,
+            location,
+            ..
+        } = &event
+        {
+            let id = self.snapshot.lock().ok().map(|s| s.server_id);
+            if let Some(id) = id {
+                let code = self
+                    .keyboard
+                    .lock()
+                    .await
+                    .physical_code(code, key, *location);
+                crate::keyboard::locks::physical_key(&self.input_app, id, &code);
             }
         }
         if let Event::PointerCapture {
@@ -1936,7 +1946,8 @@ impl Session {
             }
             event = Event::ReleaseAll;
         }
-        if matches!(&event, Event::Key { code, pressed: true, .. } if code == "Escape")
+        if matches!(&event, Event::Key { code, key, location, pressed: true, .. }
+            if input::physical::resolved_code(code, key, *location) == "Escape")
             && self
                 .snapshot
                 .lock()
@@ -1967,6 +1978,7 @@ impl Session {
         if let Event::Key {
             code,
             key,
+            location,
             pressed,
             modifiers,
         } = &event
@@ -1987,7 +1999,7 @@ impl Session {
                         && matches!(ui.dialog, crate::ui::Dialog::None)
                 });
             if !active_console {
-                self.keyboard.lock().await.release_key(code);
+                self.keyboard.lock().await.release_key(code, key, *location);
                 return Ok(());
             }
             let local = if *pressed {
@@ -1996,12 +2008,12 @@ impl Session {
                     .lock()
                     .map(|s| (s.keyboard_options, s.mouse_mode))
                     .map_err(|_| Error::Invalid("Session unavailable".into()))?;
-                self.keyboard
-                    .lock()
-                    .await
+                let keyboard = self.keyboard.lock().await;
+                let routed_code = keyboard.physical_code(code, key, *location);
+                keyboard
                     .local_modifiers(key, *modifiers)
                     .and_then(|modifiers| {
-                        input::routing::local(code, modifiers, options, mouse_mode)
+                        input::routing::local(&routed_code, modifiers, options, mouse_mode)
                     })
             } else {
                 None
@@ -2145,7 +2157,7 @@ impl Session {
                     })
                     .unwrap_or(true);
             if blocked {
-                self.keyboard.lock().await.release_key(code);
+                self.keyboard.lock().await.release_key(code, key, *location);
                 return Ok(());
             }
             let token = self
@@ -2157,7 +2169,7 @@ impl Session {
             if let Some(token) = token {
                 self.sender
                     .send(Outgoing::Mouse(crate::mouse::Operation::Key {
-                        code: code.clone(),
+                        code: input::physical::resolved_code(code, key, *location).into(),
                         pressed: *pressed,
                         token,
                     }))
@@ -2170,13 +2182,14 @@ impl Session {
             Event::Key {
                 code,
                 key,
+                location,
                 pressed,
                 modifiers,
             } => {
                 let mut keyboard = self.keyboard.lock().await;
                 if let Err(error) = self.input_ready() {
                     if !pressed {
-                        keyboard.release_key(code);
+                        keyboard.release_key(code, key, *location);
                         return Ok(());
                     }
                     return Err(error);
@@ -2187,7 +2200,14 @@ impl Session {
                     .map_err(|_| Error::Invalid("Session unavailable".into()))?
                     .keyboard_options
                     .host;
-                for report in keyboard.physical_key(code, *pressed, key, *modifiers, host) {
+                let event = input::physical::Key {
+                    code,
+                    key,
+                    location: *location,
+                    pressed: *pressed,
+                    modifiers: *modifiers,
+                };
+                for report in keyboard.physical_key(event, host) {
                     self.send_keyboard(&mut keyboard, report).await?;
                 }
             }

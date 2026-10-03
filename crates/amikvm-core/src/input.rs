@@ -26,6 +26,8 @@ pub enum Event {
         code: String,
         #[serde(default)]
         key: String,
+        #[serde(default)]
+        location: u8,
         pressed: bool,
         #[serde(default)]
         modifiers: Option<routing::Modifiers>,
@@ -107,30 +109,19 @@ pub struct State {
 }
 
 impl State {
-    pub fn physical_key(
-        &mut self,
-        code: &str,
-        pressed: bool,
-        key: &str,
-        modifiers: Option<routing::Modifiers>,
-        host: routing::Host,
-    ) -> Vec<[u8; 8]> {
+    pub fn physical_key(&mut self, event: physical::Key<'_>, host: routing::Host) -> Vec<[u8; 8]> {
         let software = self.software.report();
         self.physical
-            .key(
-                code,
-                pressed,
-                key,
-                modifiers,
-                physical::Client::current(),
-                host,
-            )
+            .key(event, physical::Client::current(), host)
             .into_iter()
             .map(|report| merge_reports(report, software))
             .collect()
     }
-    pub fn release_key(&mut self, code: &str) {
-        self.physical.release_key(code);
+    pub fn physical_code(&self, code: &str, key: &str, location: u8) -> String {
+        self.physical.code_for(code, key, location).into()
+    }
+    pub fn release_key(&mut self, code: &str, key: &str, location: u8) {
+        self.physical.release_key(code, key, location);
     }
     pub fn flush_physical(&mut self) -> Option<[u8; 8]> {
         let report = self.physical.flush_pending()?;
