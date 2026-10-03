@@ -52,6 +52,8 @@ cargo check --workspace
 
 Windows 单文件使用 MSVC 目标，Rust 和 OpenH264 的运行库以及 WebView2 加载器静态链接，界面资源嵌入 EXE；运行仍需系统安装 WebView2。打包会核对 PE 架构、GUI 子系统及普通/延迟 DLL 导入，拒绝需要伴随 DLL 的产物。GNU Windows 构建不用于单文件交付。
 
+macOS 打包保留框架内的相对符号链接和可执行权限，在临时目录核对应用标识、版本、图标、Mach-O 架构、最低系统版本及递归库依赖。检查通过后才替换已有 `.app`；检查失败会保留旧产物，替换失败会尝试恢复。依赖必须来自系统或应用自身，不得指向构建目录或 Java/JVM/JNI 库。这些结构检查不代替 macOS 本机启动验证。
+
 Linux 主机也可按 [Tauri 的 Windows 交叉编译方式](https://v2.tauri.app/distribute/windows-installer/#build-windows-apps-on-linux-and-macos) 安装 LLVM（`clang-cl`、`lld-link`、`llvm-rc` 在 PATH 中）、Windows Rust 目标和 `cargo-xwin` 后运行：
 
 ```sh

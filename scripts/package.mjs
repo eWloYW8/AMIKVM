@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { validateWindowsExecutable } from './windows-executable.mjs';
+import { publishMacosBundle, validateMacosBundle } from './macos-bundle.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
@@ -51,9 +52,11 @@ mkdirSync(output, { recursive: true });
 if (platform === 'macos') {
   run('pnpm', [...buildArguments, '--bundles', 'app']);
   const destination = join(output, 'AMIKVM.app');
-  rmSync(destination, { recursive: true, force: true });
-  cpSync(join(release, 'bundle', 'macos', 'AMIKVM.app'), destination, { recursive: true, dereference: false });
-  console.log(`Created ${destination}`);
+  const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+  const info = publishMacosBundle(join(release, 'bundle', 'macos', 'AMIKVM.app'), destination, path => validateMacosBundle(path, architecture, {
+    identifier: config.identifier, version, minimumSystemVersion: config.bundle.macOS.minimumSystemVersion,
+  }));
+  console.log(`Created ${destination}; ${info.architectures.join('/')} executable, ${info.bundledLibraries} bundled libraries`);
 } else if (platform === 'windows') {
   run('pnpm', [...buildArguments, '--no-bundle']);
   const info = validateWindowsExecutable(join(release, 'amikvm.exe'), architecture);
