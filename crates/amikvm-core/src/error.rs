@@ -95,7 +95,7 @@ impl VideoSessionError {
             Self::UnexpectedValidation => "尚未请求 KVM 认证，BMC 已返回成功响应",
             Self::UnsupportedSoc(_) => "BMC 的视频芯片与 AST 客户端不匹配",
             Self::InvalidClientList => "BMC 的 KVM 客户端地址列表长度无效",
-            Self::LocalAddressesUnavailable => "无法读取本机网络接口以检查重复 KVM 会话",
+            Self::LocalAddressesUnavailable => "无法读取本机网络接口以建立 KVM 会话",
         }
     }
 }

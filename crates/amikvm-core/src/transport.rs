@@ -14,6 +14,7 @@ use tokio::{
     time::timeout,
 };
 
+pub mod identity;
 mod single_port;
 
 pub trait AsyncSocket: AsyncRead + AsyncWrite + Unpin + Send {}

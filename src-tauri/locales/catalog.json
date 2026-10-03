@@ -13,7 +13,7 @@
   "尚未请求 KVM 认证，BMC 已返回成功响应": ["The BMC reported KVM authentication success before authentication was requested", "Le BMC a annoncé une authentification KVM réussie avant toute demande"],
   "BMC 的视频芯片与 AST 客户端不匹配": ["The BMC video chip does not match the AST client", "La puce vidéo du BMC ne correspond pas au client AST"],
   "BMC 的 KVM 客户端地址列表长度无效": ["The BMC KVM client address list has an invalid length", "La liste des adresses des clients KVM du BMC a une longueur invalide"],
-  "无法读取本机网络接口以检查重复 KVM 会话": ["Local network interfaces could not be read to check for duplicate KVM sessions", "Impossible de lire les interfaces réseau locales pour vérifier les sessions KVM en double"],
+  "无法读取本机网络接口以建立 KVM 会话": ["Local network interfaces could not be read to establish the KVM session", "Impossible de lire les interfaces réseau locales pour établir la session KVM"],
   "单端口连接被拒绝：Web 会话索引无效": ["Single-port connection rejected: invalid web session index", "Connexion à port unique refusée : index de session Web invalide"],
   "单端口连接被拒绝：Web 会话未激活": ["Single-port connection rejected: inactive web session", "Connexion à port unique refusée : session Web inactive"],
   "单端口连接被拒绝：Web 会话槽位已满": ["Single-port connection rejected: no free web session slot", "Connexion à port unique refusée : aucune place disponible pour une session Web"],

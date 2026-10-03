@@ -700,10 +700,12 @@ impl Session {
                 let mut cursor = Cursor::default();
                 let mut last_video_state = std::time::Instant::now();
                 let result: Result<()> = async {
-                let hostname = hostname::get().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|_| "AMIKVM".into());
-                let mac = mac_address::get_mac_address().ok().flatten().map(|m| m.to_string().replace(':', "-")).unwrap_or_default();
+                let client_name = transport::identity::client_name().unwrap_or_else(|_| "AMIKVM".into());
+                let interfaces = transport::identity::interfaces().map_err(|_| amikvm_core::error::VideoSessionError::LocalAddressesUnavailable)?;
+                let mac = transport::identity::client_mac(connection.local_address, &interfaces)
+                    .map(transport::identity::wire_mac).unwrap_or_default();
                 if let Some((id, _)) = previous {
-                    worker_sender.send(Outgoing::Bytes(web.reconnect_packet(&connection.local_address.ip().to_string(), &hostname, &mac, id)?)).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
+                    worker_sender.send(Outgoing::Bytes(web.reconnect_packet(&connection.local_address.ip().to_string(), &client_name, &mac, id)?)).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                 }
                 let authentication_started = std::time::Instant::now();
                 let mut state_clock = tokio::time::interval(Duration::from_secs(1));
@@ -792,16 +794,15 @@ impl Session {
                         }
                         23 => {
                             let local_macs = if !body.is_empty() && !web.config.single_port {
-                                mac_address::MacAddressIterator::new()
-                                    .map_err(|_| amikvm_core::error::VideoSessionError::LocalAddressesUnavailable)?
-                                    .map(|mac| mac.bytes())
+                                interfaces.iter()
+                                    .filter_map(|interface| interface.mac)
                                     .collect::<Vec<_>>()
                             } else { vec![] };
                             first_client = protocol::session::hello(header.status, &body, web.config.single_port, &local_macs)?;
                             if authentication_sent { continue; }
                             let auth = web.authentication_packet(
                                 &connection.local_address.ip().to_string(),
-                                &hostname,
+                                &client_name,
                                 &mac,
                             )?;
                             if web.config.oem_features & 32 != 0 {
