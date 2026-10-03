@@ -773,6 +773,59 @@ async fn save_jpeg(
     Ok(Some(display_path))
 }
 
+pub(crate) async fn capture(app: &AppHandle, id: Uuid) -> Response<()> {
+    let state = app.state::<AppState>();
+    let session = state
+        .sessions
+        .lock()
+        .await
+        .get(&id)
+        .cloned()
+        .ok_or("Session not found")?;
+    let Ok(_dialog_guard) = session.file_dialog.try_lock() else {
+        return Ok(());
+    };
+    let frame = session
+        .video
+        .lock()
+        .map_err(|_| "Video unavailable")?
+        .latest()
+        .ok_or("收到远程画面后才能截图")?;
+    save_jpeg(app, frame, "AMIKVM").await?;
+    Ok(())
+}
+
+pub(crate) fn fullscreen(app: &AppHandle) -> Response<()> {
+    let window = app.get_webview_window("main").ok_or("Window unavailable")?;
+    window
+        .set_fullscreen(!window.is_fullscreen().map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    app.emit("ui-changed", ()).ok();
+    Ok(())
+}
+
+/// Buttons and native keyboard shortcuts share the pause state. Refresh also
+/// resumes the stream, so it must restore remote input and the toolbar state.
+pub(crate) async fn video_control(app: &AppHandle, id: Uuid, control: Control) -> Response<()> {
+    let paused = match control {
+        Control::Pause => Some(true),
+        Control::Resume | Control::Refresh => Some(false),
+        _ => None,
+    };
+    let state = app.state::<AppState>();
+    commands::send_control(state.clone(), id, control).await?;
+    if let Some(paused) = paused {
+        let mut ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
+        if paused {
+            ui.paused.insert(id);
+        } else {
+            ui.paused.remove(&id);
+        }
+        app.emit("ui-changed", ()).ok();
+    }
+    Ok(())
+}
+
 async fn open_capture(
     state: State<'_, AppState>,
     id: Uuid,
@@ -1238,7 +1291,7 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                     _ => return Err("This action does not accept an input value".into()),
                 }
             }
-            commands::send_control(state.clone(), id, control).await?;
+            video_control(app, id, control).await?;
         }
         Intent::MouseCapture { id, enabled } => {
             if enabled && state.shutdown.blocks_connection(id) {
@@ -1324,8 +1377,8 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 .map_err(|_| "Interface state unavailable")?
                 .paused
                 .contains(&id);
-            commands::send_control(
-                state.clone(),
+            video_control(
+                app,
                 id,
                 if paused {
                     Control::Resume
@@ -1334,12 +1387,6 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 },
             )
             .await?;
-            let mut ui = state.ui.lock().map_err(|_| "Interface state unavailable")?;
-            if paused {
-                ui.paused.remove(&id);
-            } else {
-                ui.paused.insert(id);
-            }
         }
         Intent::Shortcut { id, name } => {
             let session = state
@@ -1486,10 +1533,7 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
             }
         }
         Intent::Fullscreen => {
-            let window = app.get_webview_window("main").ok_or("Window unavailable")?;
-            window
-                .set_fullscreen(!window.is_fullscreen().map_err(|e| e.to_string())?)
-                .map_err(|e| e.to_string())?;
+            fullscreen(app)?;
         }
         Intent::Zoom { id, value } => {
             let zoom = match value.as_str() {
@@ -2310,23 +2354,7 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
             }
         }
         Intent::Capture { id } => {
-            let session = state
-                .sessions
-                .lock()
-                .await
-                .get(&id)
-                .cloned()
-                .ok_or("Session not found")?;
-            let Ok(_dialog_guard) = session.file_dialog.try_lock() else {
-                return Ok(());
-            };
-            let frame = session
-                .video
-                .lock()
-                .map_err(|_| "Video unavailable")?
-                .latest()
-                .ok_or("收到远程画面后才能截图")?;
-            save_jpeg(app, frame, "AMIKVM").await?;
+            capture(app, id).await?;
         }
         Intent::TextDialog { id } => {
             state

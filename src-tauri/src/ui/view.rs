@@ -2300,7 +2300,7 @@ fn console(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                 vec![
                     node(
                         "video",
-                        json!({"serverId":s.id,"enabled":controllable && !paused && snapshot.is_some_and(|v|v.video_signal) && matches!(ui.dialog,Dialog::None),"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"cursorFocus":snapshot.and_then(|v|v.local_cursor.focus),"captureToken":if matches!(ui.dialog,Dialog::None) && !paused { snapshot.and_then(|v|v.mouse_capture.token) } else {None},"style":frame_style}),
+                        json!({"serverId":s.id,"enabled":controllable && !paused && snapshot.is_some_and(|v|v.video_signal) && matches!(ui.dialog,Dialog::None),"keyboardEvents":connected && matches!(ui.dialog,Dialog::None),"streaming":connected,"visible":connected && snapshot.is_some_and(|v|v.video_signal),"cursorFocus":snapshot.and_then(|v|v.local_cursor.focus),"captureToken":if matches!(ui.dialog,Dialog::None) && !paused { snapshot.and_then(|v|v.mouse_capture.token) } else {None},"style":frame_style}),
                         vec![],
                     ),
                     group(
@@ -2793,7 +2793,14 @@ fn keyboard_options(server: &Server, snapshot: Option<&Snapshot>, enabled: bool)
             "p",
             "input-help",
             tr(
-                "启用后 Ctrl + F1 和 Alt + T 发送到远端；Ctrl + Shift + L 仍控制本地日志。系统保留组合键可通过上方按钮发送。",
+                "启用后 Ctrl + F1 和本地 Alt 快捷键发送到远端；Ctrl + Shift + L 仍控制本地日志，第三种鼠标模式的 Alt + C 仍开关捕获。系统保留组合键可通过上方按钮发送。",
+            ),
+        ),
+        label(
+            "p",
+            "input-help",
+            tr(
+                "关闭全键盘支持时，点击画面可用 Alt + P 暂停、Alt + R 恢复、Alt + E 刷新、Alt + S 截图、Alt + F 全屏、Alt + N 切换主机显示。",
             ),
         ),
         field(

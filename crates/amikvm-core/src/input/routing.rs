@@ -32,6 +32,30 @@ pub enum Action {
     Paste,
     Calibrate,
     Cursor,
+    Pause,
+    Resume,
+    Refresh,
+    Capture,
+    Fullscreen,
+    HostDisplay,
+}
+
+/// Raw webview modifier flags remain available after a local action releases
+/// remote keys, and while the remote keyboard is paused or view-only.
+#[derive(Clone, Copy, Deserialize)]
+pub struct Modifiers {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub meta: bool,
+}
+impl Modifiers {
+    pub fn bits(self) -> u8 {
+        u8::from(self.ctrl)
+            | (u8::from(self.shift) << 1)
+            | (u8::from(self.alt) << 2)
+            | (u8::from(self.meta) << 3)
+    }
 }
 pub fn local(
     code: &str,
@@ -45,9 +69,19 @@ pub fn local(
     match code {
         "KeyV" if ctrl && options.easy_paste => Some(Action::Paste),
         "KeyL" if ctrl && shift => Some(Action::Log),
-        "KeyC" if alt && (!options.full_keyboard || mouse_mode == Some(3)) => Some(Action::Cursor),
+        "KeyC" if alt && !ctrl && (!options.full_keyboard || mouse_mode == Some(3)) => {
+            Some(Action::Cursor)
+        }
         "F1" if ctrl && !options.full_keyboard => Some(Action::About),
-        "KeyT" if alt && !options.full_keyboard && mouse_mode == Some(1) => Some(Action::Calibrate),
+        "KeyT" if alt && !ctrl && !options.full_keyboard && mouse_mode == Some(1) => {
+            Some(Action::Calibrate)
+        }
+        "KeyP" if alt && !ctrl && !options.full_keyboard => Some(Action::Pause),
+        "KeyR" if alt && !ctrl && !options.full_keyboard => Some(Action::Resume),
+        "KeyE" if alt && !ctrl && !options.full_keyboard => Some(Action::Refresh),
+        "KeyS" if alt && !ctrl && !options.full_keyboard => Some(Action::Capture),
+        "KeyF" if alt && !ctrl && !options.full_keyboard => Some(Action::Fullscreen),
+        "KeyN" if alt && !ctrl && !options.full_keyboard => Some(Action::HostDisplay),
         _ => None,
     }
 }

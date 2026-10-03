@@ -1377,7 +1377,7 @@ impl Session {
             return Ok(());
         }
         if let Control::InputEncryption { enabled } = control {
-            self.input(Event::ReleaseAll).await?;
+            self.release_input(true).await?;
             let (reply, result) = oneshot::channel();
             self.sender
                 .send(Outgoing::Encryption {
@@ -1395,7 +1395,7 @@ impl Session {
         let packet_kind = u16::from_le_bytes([bytes[0], bytes[1]]);
         let packet_length = bytes.len();
         if matches!(control, Control::MouseMode { .. }) {
-            self.input(Event::Release).await?;
+            self.release_input(false).await?;
         }
         // A new software layout must not carry latched keys from the old layout.
         if matches!(control, Control::KeyboardLayout { .. }) {
@@ -1936,7 +1936,7 @@ impl Session {
             }
             event = Event::ReleaseAll;
         }
-        if matches!(&event, Event::Key { code, pressed: true } if code == "Escape")
+        if matches!(&event, Event::Key { code, pressed: true, .. } if code == "Escape")
             && self
                 .snapshot
                 .lock()
@@ -1964,20 +1964,101 @@ impl Session {
         {
             return Ok(());
         }
-        if let Event::Key { code, pressed } = &event {
+        if let Event::Key {
+            code,
+            pressed,
+            modifiers,
+        } = &event
+        {
+            let id = self
+                .snapshot
+                .lock()
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                .server_id;
+            let active_console = self
+                .input_app
+                .state::<crate::commands::AppState>()
+                .ui
+                .lock()
+                .is_ok_and(|ui| {
+                    ui.selected == Some(id)
+                        && !ui.playback_selected
+                        && matches!(ui.dialog, crate::ui::Dialog::None)
+                });
+            if !active_console {
+                self.keyboard.lock().await.key(code, false);
+                return Ok(());
+            }
             let local = if *pressed {
                 let (options, mouse_mode) = self
                     .snapshot
                     .lock()
                     .map(|s| (s.keyboard_options, s.mouse_mode))
                     .map_err(|_| Error::Invalid("Session unavailable".into()))?;
-                let modifiers = self.keyboard.lock().await.report()[0];
+                let modifiers = if let Some(modifiers) = modifiers {
+                    modifiers.bits()
+                } else {
+                    self.keyboard.lock().await.report()[0]
+                };
                 input::routing::local(code, modifiers, options, mouse_mode)
             } else {
                 None
             };
             if let Some(action) = local {
                 use input::routing::Action;
+                if matches!(
+                    action,
+                    Action::Pause
+                        | Action::Resume
+                        | Action::Refresh
+                        | Action::Capture
+                        | Action::Fullscreen
+                        | Action::HostDisplay
+                ) {
+                    self.release_input(true).await?;
+                    let id = self
+                        .snapshot
+                        .lock()
+                        .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                        .server_id;
+                    return match action {
+                        Action::Pause | Action::Resume | Action::Refresh => {
+                            crate::ui::video_control(
+                                &self.input_app,
+                                id,
+                                match action {
+                                    Action::Pause => Control::Pause,
+                                    Action::Resume => Control::Resume,
+                                    _ => Control::Refresh,
+                                },
+                            )
+                            .await
+                            .map_err(Error::Invalid)
+                        }
+                        Action::Capture => crate::ui::capture(&self.input_app, id)
+                            .await
+                            .map_err(Error::Invalid),
+                        Action::Fullscreen => {
+                            crate::ui::fullscreen(&self.input_app).map_err(Error::Invalid)
+                        }
+                        Action::HostDisplay => {
+                            let locked = self.snapshot.lock().ok().and_then(|s| {
+                                (s.can_control
+                                    && amikvm_core::video::config::host_display_available(
+                                        s.host_display,
+                                        s.host_display_supported,
+                                    ))
+                                .then_some(s.host_display != Some(1))
+                            });
+                            if let Some(locked) = locked {
+                                self.control(Control::HostDisplay { locked }).await
+                            } else {
+                                Ok(()) // The original disabled host-display menu consumes Alt+N.
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+                }
                 if action == Action::Cursor {
                     return self.cursor_shortcut().await;
                 }
@@ -1994,7 +2075,9 @@ impl Session {
                 update(&self.input_app, &self.snapshot, |s| {
                     s.software_keys = keyboard.software_keys()
                 });
-                self.send_keyboard(&mut keyboard, report).await?;
+                if self.input_ready().is_ok() {
+                    self.send_keyboard(&mut keyboard, report).await?;
+                }
                 drop(keyboard);
                 if action == Action::Paste {
                     let state = self.input_app.state::<crate::commands::AppState>();
@@ -2042,6 +2125,27 @@ impl Session {
                 }
                 return Ok(());
             }
+            // The canvas still forwards raw keyboard events for local actions
+            // while paused or view-only; ordinary keys remain Rust-gated.
+            let (id, can_control) = self
+                .snapshot
+                .lock()
+                .map(|s| (s.server_id, s.can_control))
+                .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+            let blocked = !can_control
+                || self
+                    .input_app
+                    .state::<crate::commands::AppState>()
+                    .ui
+                    .lock()
+                    .map(|ui| {
+                        !matches!(ui.dialog, crate::ui::Dialog::None) || ui.paused.contains(&id)
+                    })
+                    .unwrap_or(true);
+            if blocked {
+                self.keyboard.lock().await.key(code, false);
+                return Ok(());
+            }
             let token = self
                 .snapshot
                 .lock()
@@ -2061,7 +2165,7 @@ impl Session {
             }
         }
         match &event {
-            Event::Key { code, pressed } => {
+            Event::Key { code, pressed, .. } => {
                 let mut keyboard = self.keyboard.lock().await;
                 if let Err(error) = self.input_ready() {
                     if !pressed {

@@ -24,6 +24,8 @@ pub enum Event {
     Key {
         code: String,
         pressed: bool,
+        #[serde(default)]
+        modifiers: Option<routing::Modifiers>,
     },
     Pointer {
         buttons: u8,

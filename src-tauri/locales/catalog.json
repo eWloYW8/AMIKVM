@@ -2723,5 +2723,7 @@
   "本机光标移动失败，校准已暂停。": [
     "Could not move the local cursor. Calibration has been paused.",
     "Impossible de déplacer le curseur local. Le calibrage est suspendu."
-  ]
+  ],
+  "启用后 Ctrl + F1 和本地 Alt 快捷键发送到远端；Ctrl + Shift + L 仍控制本地日志，第三种鼠标模式的 Alt + C 仍开关捕获。系统保留组合键可通过上方按钮发送。": ["When enabled, Ctrl + F1 and local Alt shortcuts are sent to the remote host. Ctrl + Shift + L still controls local logging, and Alt + C still toggles capture in the third mouse mode. Use the buttons above for shortcuts reserved by your system.", "Lorsque cette option est activée, Ctrl + F1 et les raccourcis Alt locaux sont envoyés à l’hôte distant. Ctrl + Maj + L contrôle toujours la journalisation locale et Alt + C active ou désactive la capture dans le troisième mode de souris. Utilisez les boutons ci-dessus pour les raccourcis réservés par votre système."],
+  "关闭全键盘支持时，点击画面可用 Alt + P 暂停、Alt + R 恢复、Alt + E 刷新、Alt + S 截图、Alt + F 全屏、Alt + N 切换主机显示。": ["With full keyboard support disabled, click the console to use Alt + P to pause, Alt + R to resume, Alt + E to refresh, Alt + S to capture, Alt + F for fullscreen, and Alt + N to toggle the host display.", "Lorsque la prise en charge complète du clavier est désactivée, cliquez sur la console : Alt + P met en pause, Alt + R reprend, Alt + E actualise, Alt + S capture, Alt + F passe en plein écran et Alt + N bascule l’affichage de l’hôte."]
 }
