@@ -65,7 +65,10 @@ jobs:
           persist-credentials: false
       - name: Keep temporary files inside the workspace
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.local-work/tmp"
+          mkdir -p "$GITHUB_WORKSPACE/.local-work/tmp" "$GITHUB_WORKSPACE/.local-work/pnpm"
+          # Give pnpm's installer its own workspace so installing application
+          # dependencies cannot remove the package manager that is running.
+          printf 'packages: []\n' > "$GITHUB_WORKSPACE/.local-work/pnpm/pnpm-workspace.yaml"
           node -e 'const fs = require("node:fs"); const path = require("node:path").join(process.env.GITHUB_WORKSPACE, ".local-work", "tmp"); fs.appendFileSync(process.env.GITHUB_ENV, `TMPDIR=${path}\nTMP=${path}\nTEMP=${path}\n`);'
       - uses: pnpm/action-setup@v4
         with:
