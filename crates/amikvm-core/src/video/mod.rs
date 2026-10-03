@@ -501,14 +501,16 @@ impl Cursor {
         if body[0] > 1 {
             return Err(Error::Protocol("Unknown AST cursor type".into()));
         }
+        let offset_x = u16::from_le_bytes(body[9..11].try_into().unwrap());
+        let offset_y = u16::from_le_bytes(body[11..13].try_into().unwrap());
+        if offset_x > 64 || offset_y > 64 {
+            return Err(Error::Protocol("Invalid AST cursor offset".into()));
+        }
         self.kind = body[0];
         self.x = i16::from_le_bytes(body[5..7].try_into().unwrap());
         self.y = i16::from_le_bytes(body[7..9].try_into().unwrap());
-        self.offset_x = u16::from_le_bytes(body[9..11].try_into().unwrap());
-        self.offset_y = u16::from_le_bytes(body[11..13].try_into().unwrap());
-        if self.offset_x > 64 || self.offset_y > 64 {
-            return Err(Error::Protocol("Invalid AST cursor offset".into()));
-        }
+        self.offset_x = offset_x;
+        self.offset_y = offset_y;
         if body.len() > 13 {
             self.pixels = body[13..]
                 .chunks_exact(2)
@@ -531,10 +533,12 @@ impl Cursor {
                 }
                 let pixel = self.pixels
                     [(row + self.offset_y) as usize * 64 + (col + self.offset_x) as usize];
+                // Both cursor formats carry RGB444. Repeat each nibble to
+                // normalize 0..15 to the full 8-bit display range, 0..255.
                 let rgb = [
-                    ((pixel & 0xf00) >> 4) as u8,
-                    (pixel & 0xf0) as u8,
-                    ((pixel & 15) << 4) as u8,
+                    ((pixel >> 8) & 15) as u8 * 17,
+                    ((pixel >> 4) & 15) as u8 * 17,
+                    (pixel & 15) as u8 * 17,
                 ];
                 let index = (y as usize * width as usize + x as usize) * 4;
                 if self.kind == 0 {
@@ -548,8 +552,9 @@ impl Cursor {
                 } else {
                     let alpha = (pixel >> 12) as u32;
                     for channel in 0..3 {
+                        let color = u32::from(rgb[channel]);
                         rgba[index + channel] = ((rgba[index + channel] as u32 * (15 - alpha)
-                            + rgb[channel] as u32 * alpha)
+                            + color * alpha)
                             / 15) as u8;
                     }
                 }
