@@ -112,6 +112,32 @@ pub fn physical_key(app: &AppHandle, id: Uuid, code: &str) {
         }
     }
 }
+#[cfg(target_os = "windows")]
+pub fn native_input() -> bool {
+    native::handles_input()
+}
+
+/// Windows lock keys have a single native source; WebView2 copies are ignored.
+#[cfg(target_os = "windows")]
+pub(super) async fn physical_event(app: &AppHandle, code: &'static str, pressed: bool) {
+    let state = app.state::<AppState>();
+    let id = state.ui.lock().ok().and_then(|ui| ui.selected);
+    let Some(id) = id else { return };
+    if !crate::pointer_capture::selected(app, id)
+        || !app
+            .get_webview_window("main")
+            .is_some_and(|w| w.is_focused().unwrap_or(false))
+    {
+        return;
+    }
+    let session = state.sessions.lock().await.get(&id).cloned();
+    if let Some(session) = session {
+        if session.snapshot.lock().is_ok_and(|s| s.input_focused) {
+            let _ = session.native_lock_key(code, pressed).await;
+        }
+    }
+}
+
 pub fn owns(app: &AppHandle, id: Uuid, token: Uuid) -> bool {
     app.try_state::<AppState>().is_some_and(|state| {
         !state
@@ -366,7 +392,7 @@ fn write(locks: &mut State, bits: u8, mask: u8, restoring: bool, now: Instant) {
     }
 }
 pub fn install(app: &AppHandle) {
-    if let Err(error) = native::install() {
+    if let Err(error) = native::install(app) {
         if let Ok(mut locks) = app.state::<AppState>().host_keyboard.locks.lock() {
             locks.fail(error);
         }

@@ -1,4 +1,4 @@
-//! Native lock state. Call on the UI thread, including Windows' message filter.
+//! Native lock state. Windows observes locks before WebView2 input dispatch.
 #[derive(Clone, Copy, Default)]
 pub struct Observation {
     pub bits: u8,
@@ -119,7 +119,7 @@ mod platform {
         }
         Ok(())
     }
-    pub fn install() -> Result<(), String> {
+    pub fn install(_app: &tauri::AppHandle) -> Result<(), String> {
         Ok(())
     }
     pub fn uninstall() {}
@@ -128,67 +128,145 @@ mod platform {
 #[cfg(target_os = "windows")]
 mod platform {
     use super::Observation;
-    use std::sync::atomic::{AtomicPtr, Ordering};
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicPtr, AtomicU8, AtomicU32, Ordering},
+    };
     use windows_sys::Win32::{
         Foundation::*,
-        System::Threading::GetCurrentThreadId,
+        System::Threading::{GetCurrentProcessId, GetCurrentThreadId},
         UI::{Input::KeyboardAndMouse::*, WindowsAndMessaging::*},
     };
     const TAG: usize = 0x414d494b;
     static HOOK: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
-    unsafe extern "system" fn filter(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        if code >= 0
-            && wparam == PM_REMOVE as usize
-            && unsafe { GetMessageExtraInfo() } as usize == TAG
-        {
-            let message = unsafe { &mut *(lparam as *mut MSG) };
-            if matches!(
-                message.message,
-                WM_KEYDOWN | WM_KEYUP | WM_SYSKEYDOWN | WM_SYSKEYUP
-            ) && matches!(message.wParam as u16, VK_CAPITAL | VK_NUMLOCK | VK_SCROLL)
-            {
-                // Keep OS toggle/LED updates; remove only our own messages before
-                // WebView2 can send them back to the BMC as physical input.
-                message.message = WM_NULL;
-                message.wParam = 0;
-                message.lParam = 0;
-            }
-        }
-        unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) }
+    static THREAD: AtomicU32 = AtomicU32::new(0);
+    static BITS: AtomicU8 = AtomicU8::new(0);
+    static DOWN: AtomicU8 = AtomicU8::new(0);
+    static WORKER: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+    thread_local! {
+        static EVENTS: std::cell::RefCell<Option<tokio::sync::mpsc::UnboundedSender<(&'static str, bool)>>> = const { std::cell::RefCell::new(None) };
     }
-    pub fn install() -> Result<(), String> {
-        let hook = unsafe {
-            SetWindowsHookExW(
-                WH_GETMESSAGE,
-                Some(filter),
-                std::ptr::null_mut(),
-                GetCurrentThreadId(),
-            )
-        };
-        if hook.is_null() {
-            Err("无法安装本机锁定键消息过滤器".into())
-        } else {
-            HOOK.store(hook, Ordering::Release);
-            Ok(())
+
+    unsafe extern "system" fn observe(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        // Do not block our injected keys: Windows still needs to toggle its
+        // state and LEDs. Only native, untagged events may reach the remote HID.
+        let result = unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) };
+        if code != HC_ACTION as i32 || result != 0 {
+            return result;
         }
+        let event = unsafe { &*(lparam as *const KBDLLHOOKSTRUCT) };
+        let (bit, name) = match event.vkCode as u16 {
+            VK_NUMLOCK => (1, "NumLock"),
+            VK_CAPITAL => (2, "CapsLock"),
+            VK_SCROLL => (4, "ScrollLock"),
+            _ => return result,
+        };
+        let pressed = match wparam as u32 {
+            WM_KEYDOWN | WM_SYSKEYDOWN => true,
+            WM_KEYUP | WM_SYSKEYUP => false,
+            _ => return result,
+        };
+        let was_down = if pressed {
+            DOWN.fetch_or(bit, Ordering::AcqRel) & bit != 0
+        } else {
+            DOWN.fetch_and(!bit, Ordering::AcqRel) & bit != 0
+        };
+        if pressed && !was_down {
+            BITS.fetch_xor(bit, Ordering::AcqRel);
+        }
+        if event.dwExtraInfo == TAG || (pressed && was_down) {
+            return result;
+        }
+        let mut pid = 0;
+        unsafe { GetWindowThreadProcessId(GetForegroundWindow(), &mut pid) };
+        if pid == unsafe { GetCurrentProcessId() } {
+            EVENTS.with(|events| {
+                if let Some(events) = events.borrow().as_ref() {
+                    let _ = events.send((name, pressed));
+                }
+            });
+        }
+        result
+    }
+
+    pub fn install(app: &tauri::AppHandle) -> Result<(), String> {
+        let (events, mut receive) = tokio::sync::mpsc::unbounded_channel();
+        let app = app.clone();
+        let (ready, startup) = std::sync::mpsc::sync_channel(1);
+        let worker = std::thread::Builder::new()
+            .name("keyboard-locks".into())
+            .spawn(move || {
+                let mut bits = 0;
+                let mut down = 0;
+                for (bit, key) in [(1, VK_NUMLOCK), (2, VK_CAPITAL), (4, VK_SCROLL)] {
+                    let state = unsafe { GetKeyState(key as i32) };
+                    if state & 1 != 0 {
+                        bits |= bit;
+                    }
+                    if state < 0 {
+                        down |= bit;
+                    }
+                }
+                BITS.store(bits, Ordering::Release);
+                DOWN.store(down, Ordering::Release);
+                let mut message: MSG = unsafe { std::mem::zeroed() };
+                unsafe { PeekMessageW(&mut message, std::ptr::null_mut(), 0, 0, PM_NOREMOVE) };
+                let hook = unsafe {
+                    SetWindowsHookExW(WH_KEYBOARD_LL, Some(observe), std::ptr::null_mut(), 0)
+                };
+                if hook.is_null() {
+                    let _ = ready.send(Err("无法安装本机锁定键消息过滤器".to_owned()));
+                    return;
+                }
+                EVENTS.with(|sender| *sender.borrow_mut() = Some(events));
+                THREAD.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
+                HOOK.store(hook, Ordering::Release);
+                let _ = ready.send(Ok(()));
+                while unsafe { GetMessageW(&mut message, std::ptr::null_mut(), 0, 0) } > 0 {}
+                HOOK.store(std::ptr::null_mut(), Ordering::Release);
+                THREAD.store(0, Ordering::Release);
+                unsafe { UnhookWindowsHookEx(hook) };
+                EVENTS.with(|sender| *sender.borrow_mut() = None);
+            })
+            .map_err(|_| "无法安装本机锁定键消息过滤器".to_owned())?;
+        let result = startup
+            .recv()
+            .map_err(|_| "无法安装本机锁定键消息过滤器".to_owned())?;
+        if let Err(error) = result {
+            let _ = worker.join();
+            return Err(error);
+        }
+        *WORKER.lock().map_err(|_| "无法安装本机锁定键消息过滤器")? = Some(worker);
+        tauri::async_runtime::spawn(async move {
+            // Preserve native press/release ordering independently of WebView2.
+            while let Some((code, pressed)) = receive.recv().await {
+                super::super::physical_event(&app, code, pressed).await;
+            }
+        });
+        Ok(())
     }
     pub fn uninstall() {
-        let hook = HOOK.swap(std::ptr::null_mut(), Ordering::AcqRel);
-        if !hook.is_null() {
-            unsafe {
-                UnhookWindowsHookEx(hook);
+        let thread = THREAD.load(Ordering::Acquire);
+        if thread != 0 {
+            unsafe { PostThreadMessageW(thread, WM_QUIT, 0, 0) };
+        }
+        if let Ok(mut worker) = WORKER.lock() {
+            if let Some(worker) = worker.take() {
+                let _ = worker.join();
             }
         }
     }
+    pub fn handles_input() -> bool {
+        !HOOK.load(Ordering::Acquire).is_null()
+    }
     pub fn read() -> Result<Observation, String> {
-        let mut bits = 0;
-        for (bit, key) in [(1, VK_NUMLOCK), (2, VK_CAPITAL), (4, VK_SCROLL)] {
-            if unsafe { GetKeyState(key as i32) } & 1 != 0 {
-                bits |= bit;
-            }
+        if !handles_input() {
+            return Ok(Observation::default());
         }
+        // GetKeyState on the Tauri UI thread can be stale when WebView2 owns
+        // the input queue. The dedicated observer tracks actual transitions.
         Ok(Observation {
-            bits,
+            bits: BITS.load(Ordering::Acquire),
             readable: 7,
             writable: if HOOK.load(Ordering::Acquire).is_null() {
                 0
@@ -202,12 +280,20 @@ mod platform {
             return Err("无法安装本机锁定键消息过滤器".into());
         }
         let current = read()?;
+        if DOWN.load(Ordering::Acquire) & mask & (current.bits ^ bits) != 0 {
+            return Err("本机锁定键仍被按住".into());
+        }
         let mut inputs = Vec::new();
         for (bit, key) in [(1, VK_NUMLOCK), (2, VK_CAPITAL), (4, VK_SCROLL)] {
             if (current.bits ^ bits) & mask & bit == 0 {
                 continue;
             }
-            for flags in [0, KEYEVENTF_KEYUP] {
+            let extended = if key == VK_NUMLOCK {
+                KEYEVENTF_EXTENDEDKEY
+            } else {
+                0
+            };
+            for flags in [extended, extended | KEYEVENTF_KEYUP] {
                 inputs.push(INPUT {
                     r#type: INPUT_KEYBOARD,
                     Anonymous: INPUT_0 {
@@ -234,9 +320,7 @@ mod platform {
         } as usize;
         if sent != inputs.len() {
             if sent % 2 == 1 {
-                unsafe {
-                    SendInput(1, &inputs[sent], std::mem::size_of::<INPUT>() as i32);
-                }
+                unsafe { SendInput(1, &inputs[sent], std::mem::size_of::<INPUT>() as i32) };
             }
             return Err("无法修改本机锁定键状态".into());
         }
@@ -324,10 +408,13 @@ mod platform {
         }
         Ok(())
     }
-    pub fn install() -> Result<(), String> {
+    pub fn install(_app: &tauri::AppHandle) -> Result<(), String> {
         Ok(())
     }
     pub fn uninstall() {}
 }
 
 pub use platform::{install, read, uninstall, write};
+
+#[cfg(target_os = "windows")]
+pub use platform::handles_input;

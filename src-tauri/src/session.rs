@@ -44,6 +44,8 @@ pub struct Snapshot {
     pub local_cursor: input::cursor::State,
     pub input_encryption: bool,
     pub encryption_required: bool,
+    #[serde(skip)]
+    input_throttled_until: Option<std::time::Instant>,
     pub host_display: Option<u16>,
     pub host_display_supported: Option<bool>,
     pub service: amikvm_core::service::State,
@@ -103,6 +105,7 @@ impl Snapshot {
             local_cursor: crate::cursor::state(),
             input_encryption: false,
             encryption_required: false,
+            input_throttled_until: None,
             host_display: None,
             host_display_supported: None,
             service: Default::default(),
@@ -164,6 +167,7 @@ pub struct Session {
 
 enum Outgoing {
     Bytes(Vec<u8>),
+    Refresh,
     Power {
         operation: protocol::PowerOperation,
         reply: oneshot::Sender<Result<()>>,
@@ -390,6 +394,7 @@ impl Session {
                     s.host_display_supported = None;
                     s.host_display = None;
                     s.video_config = None;
+                    s.input_throttled_until = None;
                     if s.recovery.attempt > 0 {
                         s.recovery.authenticating();
                     }
@@ -416,10 +421,20 @@ impl Session {
                     let mut pointer = input::pointer::State::default();
                     let mut cipher = None;
                     let result = 'writer: loop {
+                        // KVMClient case 61 blocks user input for three seconds.
+                        // Keep the read task and keepalives running while the BMC
+                        // drains its HID queue; retain queued press/release order.
+                        let resume = writer_snapshot
+                            .lock()
+                            .ok()
+                            .and_then(|s| s.input_throttled_until)
+                            .unwrap_or_else(std::time::Instant::now);
+                        let input_paused = resume > std::time::Instant::now();
                         tokio::select! {
                             biased;
                             _ = &mut stop_rx => break Ok(()),
-                            _ = mouse_clock.tick() => {
+                            _ = tokio::time::sleep_until(resume.into()), if input_paused => {},
+                            _ = mouse_clock.tick(), if !input_paused => {
                                 let reports = crate::mouse::tick(&writer_app, &writer_snapshot, &writer_video);
                                 if !reports.is_empty() {
                                     match crate::mouse::write(&writer_app, &mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &reports, None, &mut pointer).await {
@@ -428,7 +443,7 @@ impl Session {
                                     }
                                 }
                             },
-                            outgoing = queue::receive(&mut receiver, link_generation) => match outgoing {
+                            outgoing = queue::receive(&mut receiver, link_generation), if !input_paused => match outgoing {
                                 Some(Outgoing::Mouse(operation)) => {
                                     let (effect, reply) = crate::mouse::process(&writer_app, &writer_snapshot, operation);
                                     let effect = match effect {
@@ -470,6 +485,16 @@ impl Session {
                                 },
                                 Some(Outgoing::Bytes(bytes)) => {
                                     if let Err(error) = transport::write_packet(&mut writer, &bytes).await { break Err(error); }
+                                },
+                                Some(Outgoing::Refresh) => {
+                                    // Preserve JViewer's separate socket writes.
+                                    // Some single-port gateways do not accept
+                                    // several IVTP commands in one TLS record.
+                                    for kind in [4, 6, 20] {
+                                        if let Err(error) = transport::write_packet(&mut writer, &protocol::command(kind, 0)).await {
+                                            break 'writer Err(error);
+                                        }
+                                    }
                                 },
                                 Some(Outgoing::Power { operation, reply }) => {
                                     let prepared = (|| {
@@ -697,6 +722,7 @@ impl Session {
                 let mut authentication_sent = previous.is_some();
                 let mut first_client = false;
                 let mut decoder = Decoder::default();
+                let mut video_suspended = false;
                 let mut cursor = Cursor::default();
                 let mut last_video_state = std::time::Instant::now();
                 let result: Result<()> = async {
@@ -835,9 +861,10 @@ impl Session {
                                 continue;
                             }
                             approved = true;
-                            if previous.is_none() {
-                                worker_sender.send(Outgoing::Bytes(web.cookie_packet()?)).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
-                            }
+                            // JVAPP sends IVTP 21 only for browser-launched
+                            // JViewer (aE), never StandAlone (aH). Our credential
+                            // login follows StandAlone; the web cookie already
+                            // authenticates HTTP and the single-port gateway.
                             for bytes in [
                                 protocol::packet(51, 0, &[2])?,
                                 protocol::command(40, 0),
@@ -876,9 +903,22 @@ impl Session {
                                 s.video_signal = false;
                             });
                         }
+                        119 if approved => {
+                            // KVMClient uses this NUL-terminated status for
+                            // hardware/BIOS updates, disabling remote input.
+                            let status = String::from_utf8_lossy(body.split(|b| *b == 0).next().unwrap_or_default()).into_owned();
+                            video_suspended = status != "none";
+                            if let Ok(mut video) = worker_video.lock() {
+                                video.no_signal();
+                            }
+                            update(&app, &worker_snapshot, |s| {
+                                s.video_signal = false;
+                                s.message = Some(if video_suspended { status } else { "No video signal".into() });
+                            });
+                        }
                         25 if approved => {
                             if let Some(frame) = fragments.push(&body)? {
-                                if decoder.decode(&frame)? {
+                                if decoder.decode(&frame)? && !video_suspended {
                                     if let Ok(mut video) = worker_video.lock() {
                                         video.publish(&decoder, &cursor);
                                     }
@@ -908,7 +948,7 @@ impl Session {
                         }
                         4098 if approved => {
                             cursor.update(&body)?;
-                            if decoder.width > 0 {
+                            if decoder.width > 0 && !video_suspended {
                                 if let Ok(mut video) = worker_video.lock() {
                                     video.update_cursor(&decoder, &cursor);
                                 }
@@ -1079,6 +1119,30 @@ impl Session {
                         }
                         52 if header.status <= 3 => update(&app, &worker_snapshot, |s| {
                             s.host_display = Some(header.status)
+                        }),
+                        53 => {
+                            let config = {
+                                let mut snapshot = worker_snapshot.lock()
+                                    .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                snapshot.config.as_mut().and_then(|config| {
+                                    let license = header.status as u8;
+                                    if config.media_license == Some(license) { return None; }
+                                    config.media_license = Some(license);
+                                    Some(config.clone())
+                                })
+                            };
+                            if let Some(config) = config {
+                                // JVAPP.C stops active redirects whenever the
+                                // media-license state changes, without closing KVM.
+                                worker_media.reconfigure(config).await;
+                                update(&app, &worker_snapshot, |_| {});
+                            }
+                        }
+                        59 => return Err(Error::Protocol(
+                            "BMC reported a failed KVM connection (IVTP 59)".into()
+                        )),
+                        61 if approved => update(&app, &worker_snapshot, |s| {
+                            s.input_throttled_until = Some(std::time::Instant::now() + Duration::from_secs(3));
                         }),
                         49 => {
                             let follow_up = if let Ok(mut snapshot) = worker_snapshot.lock() {
@@ -1394,6 +1458,13 @@ impl Session {
             return result
                 .await
                 .map_err(|_| Error::Protocol("Connection closed".into()))?;
+        }
+        if matches!(control, Control::Refresh) {
+            self.sender
+                .send(Outgoing::Refresh)
+                .await
+                .map_err(|_| Error::Protocol("Connection closed".into()))?;
+            return Ok(());
         }
         let bytes = control.encode()?;
         let packet_kind = u16::from_le_bytes([bytes[0], bytes[1]]);
@@ -1862,7 +1933,43 @@ impl Session {
         }
     }
 
-    pub async fn input(&self, mut event: Event) -> Result<()> {
+    pub async fn input(&self, event: Event) -> Result<()> {
+        #[cfg(target_os = "windows")]
+        if let Event::Key {
+            code,
+            key,
+            location,
+            ..
+        } = &event
+        {
+            if crate::keyboard::locks::native_input()
+                && matches!(
+                    input::physical::resolved_code(code, key, *location),
+                    "NumLock" | "CapsLock" | "ScrollLock"
+                )
+            {
+                // The native observer forwards real lock keys exactly once and
+                // excludes our SendInput synchronization pulses. WebView2 does
+                // not expose dwExtraInfo, so its copies cannot be trusted here.
+                return Ok(());
+            }
+        }
+        self.input_event(event).await
+    }
+
+    #[cfg(target_os = "windows")]
+    pub async fn native_lock_key(&self, code: &str, pressed: bool) -> Result<()> {
+        self.input_event(Event::Key {
+            code: code.into(),
+            key: code.into(),
+            location: 0,
+            pressed,
+            modifiers: None,
+        })
+        .await
+    }
+
+    async fn input_event(&self, mut event: Event) -> Result<()> {
         if let Event::Viewport { viewport } = event {
             let id = self
                 .snapshot
@@ -2394,7 +2501,8 @@ impl Session {
     }
     async fn lock_report(&self, report: [u8; 8], token: Option<Uuid>) -> Result<()> {
         let (reply, written) = oneshot::channel();
-        tokio::time::timeout(Duration::from_secs(2), async {
+        // IVTP 61 can suspend the writer for three seconds before dispatch.
+        tokio::time::timeout(Duration::from_secs(5), async {
             self.sender
                 .send(Outgoing::Hid {
                     mouse: false,

@@ -17,7 +17,7 @@ pub struct User {
 }
 impl User {
     pub fn parse(body: &[u8]) -> Result<Self> {
-        if body.len() != 134 {
+        if body.len() < 134 {
             return Err(Error::Protocol("Invalid session user record".into()));
         }
         let string = |bytes: &[u8]| {
@@ -71,9 +71,8 @@ pub struct Identity {
     pub address: String,
 }
 pub fn users(body: &[u8]) -> Result<Vec<User>> {
-    if body.len() % 134 != 0 {
-        return Err(Error::Protocol("Truncated session user list".into()));
-    }
+    // KVMClient reads complete 134-byte records and ignores a trailing OEM
+    // extension. A partial tail must not terminate an otherwise valid session.
     body.chunks_exact(134).map(User::parse).collect()
 }
 pub fn answer(user: &User, decision: &str) -> Result<Vec<u8>> {

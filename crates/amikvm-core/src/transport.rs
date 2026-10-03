@@ -144,9 +144,12 @@ impl BandwidthMeasurement {
 }
 
 pub async fn write_packet<W: AsyncWrite + Unpin>(stream: &mut W, bytes: &[u8]) -> Result<()> {
-    timeout(Duration::from_secs(10), stream.write_all(bytes))
-        .await
-        .map_err(|_| Error::Timeout("BMC socket write"))??;
+    timeout(Duration::from_secs(10), async {
+        stream.write_all(bytes).await?;
+        stream.flush().await
+    })
+    .await
+    .map_err(|_| Error::Timeout("BMC socket write"))??;
     Ok(())
 }
 

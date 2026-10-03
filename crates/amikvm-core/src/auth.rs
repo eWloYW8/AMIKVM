@@ -316,7 +316,10 @@ impl WebSession {
             .cookie
             .or_else(|| {
                 response.fields.text("SESSION_COOKIE").map(|cookie| {
-                    if cookie.starts_with("QSESSIONID=") {
+                    // StandAloneConnectionDialog keeps RPC SESSION_COOKIE
+                    // raw for IVTP 21 and the single-port gateway. Only HTTP
+                    // requests add SessionCookie= (see http_cookie).
+                    if mode == ApiMode::Rpc || cookie.starts_with("QSESSIONID=") {
                         cookie
                     } else {
                         format!("QSESSIONID={cookie}")

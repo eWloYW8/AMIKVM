@@ -187,10 +187,12 @@ impl Default for Decoder {
 
 impl Decoder {
     pub fn decode(&mut self, frame: &[u8]) -> Result<bool> {
-        let header = Header::parse(frame)?;
+        // VideoHeader.m returns immediately for a header-only update, before
+        // reading geometry/quality. Those fields may be unset in an empty frame.
         if frame.len() == 86 {
             return Ok(false);
         }
+        let header = Header::parse(frame)?;
         let payload = &frame[86..];
         if header.payload_length as usize > payload.len() {
             return Err(Error::Protocol("Incomplete AST compressed frame".into()));

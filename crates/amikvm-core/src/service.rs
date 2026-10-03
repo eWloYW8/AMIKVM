@@ -44,10 +44,10 @@ fn count(value: i32) -> Result<u8> {
 }
 
 pub fn services(bytes: &[u8]) -> Result<Vec<Service>> {
-    if bytes.len() != RECORD_BYTES * RECORD_COUNT {
+    if bytes.len() < RECORD_BYTES * RECORD_COUNT {
         return Err(invalid("Invalid service configuration packet length"));
     }
-    bytes
+    bytes[..RECORD_BYTES * RECORD_COUNT]
         .chunks_exact(RECORD_BYTES)
         .map(|b| {
             let name = field(&b[..17])?;
@@ -124,12 +124,13 @@ pub struct MediaConfiguration {
     pub kvm_hd_instances: u8,
 }
 impl MediaConfiguration {
-    pub fn parse(bytes: &[u8]) -> Result<Self> {
-        let prefix = match bytes.len() {
-            54 => 8,
-            46 => 0,
-            _ => return Err(invalid("Invalid media configuration packet length")),
-        };
+    pub fn parse(bytes: &[u8], retry_fields: bool) -> Result<Self> {
+        // KVMClient.nY chooses the prefix from OEM bit 32, not packet size.
+        // Additional OEM fields may follow the 46-byte common configuration.
+        let prefix = if retry_fields { 8 } else { 0 };
+        if bytes.len() < prefix + 46 {
+            return Err(invalid("Invalid media configuration packet length"));
+        }
         let retry_count = if prefix == 8 {
             Some(
                 u32::try_from(integer(bytes, 0))
@@ -253,7 +254,7 @@ impl State {
         })
     }
     pub fn receive_media(&mut self, bytes: &[u8], config: &mut SessionConfig) -> Result<bool> {
-        let next = MediaConfiguration::parse(bytes)?;
+        let next = MediaConfiguration::parse(bytes, config.oem_features & 32 != 0)?;
         let stop = next.apply(config);
         if self.media.as_ref() != Some(&next) {
             self.revision = self.revision.saturating_add(1);
@@ -265,7 +266,7 @@ impl State {
         Ok(stop)
     }
     pub fn receive_instances(&mut self, bytes: &[u8], config: &mut SessionConfig) -> Result<bool> {
-        if bytes.len() != 8 {
+        if bytes.len() < 8 {
             return Err(invalid("Invalid media instance packet length"));
         }
         let (cd, hd) = (count(integer(bytes, 0))?, count(integer(bytes, 4))?);
