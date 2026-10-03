@@ -129,6 +129,12 @@ pub(crate) fn scan(root: &Path, nodes: &Path, mountinfo: &str) -> Result<Vec<Dev
             mounted: mounted.contains(device_number.as_str()),
             groups: backing_groups(&location, &mut std::collections::HashSet::new()),
             identity,
+            // Optical drives survive disc swaps and report SCSI unit attention.
+            media_generation: if kind == Kind::Cdrom {
+                None
+            } else {
+                text(whole.join("diskseq")).parse().ok()
+            },
         });
     }
     Ok(output)
@@ -221,6 +227,15 @@ pub(super) fn present(file: &File, device: &Device) -> bool {
         && Path::new("/sys/class/block")
             .join(device.path.file_name().unwrap_or_default())
             .exists()
+}
+pub(super) fn media_generation(file: &File, device: &Device) -> Option<u64> {
+    if device.kind == Kind::Cdrom {
+        return None;
+    }
+    let mut sequence = 0u64;
+    // BLKGETDISKSEQ is _IOR(0x12, 128, __u64), including on 32-bit targets.
+    (unsafe { libc::ioctl(file.as_raw_fd(), 0x80081280 as libc::c_ulong, &mut sequence) } >= 0)
+        .then_some(sequence)
 }
 #[repr(C)]
 struct Sg {

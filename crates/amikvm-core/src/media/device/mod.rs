@@ -36,6 +36,8 @@ pub struct Device {
     pub mounted: bool,
     pub groups: Vec<String>,
     pub identity: String,
+    /// Native medium/binding identity, when the platform can provide one.
+    pub media_generation: Option<u64>,
 }
 pub fn list() -> Result<Vec<Device>> {
     let mut devices = platform::list()?;
@@ -90,6 +92,7 @@ pub fn open(expected: &Device, kind: Kind, readonly: bool) -> Result<Opened> {
                 && d.identity == expected.identity
                 && d.path == expected.path
                 && d.groups == expected.groups
+                && d.media_generation == expected.media_generation
         })
         .ok_or_else(|| Error::Invalid("实体设备已经移除或身份发生变化，请刷新列表".into()))?;
     if current.kind != kind {
@@ -110,6 +113,15 @@ pub fn open(expected: &Device, kind: Kind, readonly: bool) -> Result<Opened> {
     let (file, locks) = platform::open(current, readonly)?;
     let mut device = current.clone();
     let (length, sector, changed) = platform::geometry(&file, kind)?;
+    // Discovery, opening and geometry probing can straddle a media change.
+    // A known identity must still be verifiable before publishing the handle.
+    if current.media_generation.is_some()
+        && platform::media_generation(&file, current) != current.media_generation
+    {
+        return Err(Error::Invalid(
+            "实体介质已经更换，请刷新列表后重新连接".into(),
+        ));
+    }
     if !(512..=65536).contains(&sector)
         || !sector.is_power_of_two()
         || length % u64::from(sector) != 0
@@ -137,7 +149,14 @@ pub fn overlaps(a: &Device, b: &Device) -> bool {
 }
 /// Also checked while idle so unplugging does not wait for another BMC command.
 pub fn present(file: &File, device: &Device) -> bool {
-    platform::present(file, device)
+    platform::present(file, device) && !media_replaced(file, device)
+}
+/// Failed or unsupported probes do not establish a replacement. Keep the
+/// original generation so a later successful probe can still detect it.
+pub fn media_replaced(file: &File, device: &Device) -> bool {
+    device.media_generation.is_some_and(|expected| {
+        platform::media_generation(file, device).is_some_and(|current| current != expected)
+    })
 }
 pub fn geometry(file: &File, kind: Kind) -> Result<(u64, u32, bool)> {
     platform::geometry(file, kind)

@@ -3,6 +3,7 @@ mod optical;
 use plist::Value;
 use std::{
     collections::{BTreeSet, HashMap},
+    ffi::{CString, c_char, c_void},
     fs,
     io::{self, Read},
     os::{
@@ -221,6 +222,7 @@ pub(super) fn list() -> Result<Vec<Device>> {
             string(&info, "IORegistryEntryName"),
             node_identity(&metadata)
         );
+        let media_generation = registry_id(&id);
         devices.push(Device {
             id: id.clone(),
             path,
@@ -241,6 +243,7 @@ pub(super) fn list() -> Result<Vec<Device>> {
                 .into_iter()
                 .collect(),
             identity,
+            media_generation,
         });
     }
     // A missing volume's mount/alias state must never authorize raw writes.
@@ -303,6 +306,37 @@ pub(super) fn present(file: &File, device: &Device) -> bool {
     current.rdev() == open.rdev()
         && current.ino() == open.ino()
         && device.identity.ends_with(&node_identity(&current))
+}
+#[link(name = "IOKit", kind = "framework")]
+unsafe extern "C" {
+    fn IOBSDNameMatching(port: u32, options: u32, name: *const c_char) -> *mut c_void;
+    fn IOServiceGetMatchingService(port: u32, matching: *mut c_void) -> u32;
+    fn IORegistryEntryGetRegistryEntryID(entry: u32, identity: *mut u64) -> i32;
+    fn IOObjectRelease(object: u32) -> i32;
+}
+fn registry_id(id: &str) -> Option<u64> {
+    let name = CString::new(id).ok()?;
+    // Matching consumes the dictionary on both success and failure. Every
+    // returned service is released, including when querying its identity fails.
+    unsafe {
+        let matching = IOBSDNameMatching(0, 0, name.as_ptr());
+        if matching.is_null() {
+            return None;
+        }
+        let service = IOServiceGetMatchingService(0, matching);
+        if service == 0 {
+            return None;
+        }
+        let mut identity = 0u64;
+        let result = IORegistryEntryGetRegistryEntryID(service, &mut identity);
+        IOObjectRelease(service);
+        (result == 0).then_some(identity)
+    }
+}
+pub(super) fn media_generation(_file: &File, device: &Device) -> Option<u64> {
+    // A new IOMedia object may reuse the BSD name while the old FD remains
+    // bound to the old object. Geometry alone cannot establish that binding.
+    registry_id(&device.id)
 }
 pub(super) fn optical(
     file: &File,

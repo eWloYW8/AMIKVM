@@ -153,6 +153,9 @@ impl Image {
     }
     /// Called only from a blocking worker, including while the BMC is idle.
     pub fn poll_device(&mut self) -> Option<u64> {
+        if self.removed {
+            return None;
+        }
         let Some(device) = self.physical.as_ref() else {
             return Some(self.blocks * u64::from(self.block_size));
         };
@@ -546,7 +549,13 @@ impl Image {
         Ok(data)
     }
     fn execute(&mut self, cdb: &[u8], input: &[u8]) -> std::result::Result<Vec<u8>, [u8; 3]> {
-        if self.removed {
+        if self.removed
+            || self
+                .physical
+                .as_ref()
+                .is_some_and(|device| super::device::media_replaced(&self.file, device))
+        {
+            self.removed = true;
             return Err([2, 0x3a, 0]);
         }
         if self.physical.is_some()

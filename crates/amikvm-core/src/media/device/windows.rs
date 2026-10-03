@@ -319,6 +319,7 @@ pub(super) fn list() -> Result<Vec<Device>> {
             mounted,
             groups,
             identity,
+            media_generation: generation(&file, kind),
         });
     }
     // Unknown mounted volumes make writable whole-disk exclusion unprovable.
@@ -421,6 +422,18 @@ pub(super) fn present(file: &File, device: &Device) -> bool {
         return identity(file, &device.path).is_ok_and(|v| v.0 == device.identity);
     };
     identity(&current, &device.path).is_ok_and(|v| v.0 == device.identity)
+}
+fn generation(file: &File, kind: Kind) -> Option<u64> {
+    if kind == Kind::Cdrom {
+        // VERIFY can consume optical unit attention; SPTD already handles it.
+        return None;
+    }
+    let mut count = [0u8; 4];
+    (ioctl(file, IOCTL_STORAGE_CHECK_VERIFY2, &[], &mut count).ok()? == 4)
+        .then(|| u64::from(u32::from_le_bytes(count)))
+}
+pub(super) fn media_generation(file: &File, device: &Device) -> Option<u64> {
+    generation(file, device.kind)
 }
 struct Buffer(*mut u8, std::alloc::Layout);
 impl Buffer {
