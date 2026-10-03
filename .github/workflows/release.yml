@@ -65,18 +65,17 @@ jobs:
           persist-credentials: false
       - name: Keep temporary files inside the workspace
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.local-work/tmp" "$GITHUB_WORKSPACE/.local-work/pnpm"
-          # Give pnpm's installer its own workspace so installing application
-          # dependencies cannot remove the package manager that is running.
-          printf 'packages: []\n' > "$GITHUB_WORKSPACE/.local-work/pnpm/pnpm-workspace.yaml"
+          mkdir -p "$GITHUB_WORKSPACE/.local-work/tmp"
           node -e 'const fs = require("node:fs"); const path = require("node:path").join(process.env.GITHUB_WORKSPACE, ".local-work", "tmp"); fs.appendFileSync(process.env.GITHUB_ENV, `TMPDIR=${path}\nTMP=${path}\nTEMP=${path}\n`);'
-      - uses: pnpm/action-setup@v4
-        with:
-          dest: ${{ github.workspace }}/.local-work/pnpm
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: pnpm
+          package-manager-cache: false
+      - name: Install pnpm outside the application dependencies
+        run: |
+          PNPM_VERSION="$(node -p 'require("./package.json").packageManager.replace(/^pnpm@/, "")')"
+          npm install --prefix "$GITHUB_WORKSPACE/.local-work/pnpm" --cache "$GITHUB_WORKSPACE/.local-work/npm-cache" --no-save --package-lock=false --ignore-scripts "pnpm@$PNPM_VERSION"
+          node -e 'const fs = require("node:fs"); const path = require("node:path").join(process.env.GITHUB_WORKSPACE, ".local-work", "pnpm", "node_modules", ".bin"); fs.appendFileSync(process.env.GITHUB_PATH, `${path}\n`);'
       - name: Install Rust
         run: |
           rustup toolchain install 1.96.0 --profile minimal --target "$BUILD_TARGET"
