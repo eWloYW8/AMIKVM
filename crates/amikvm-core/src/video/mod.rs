@@ -500,9 +500,6 @@ impl Cursor {
         if body.len() < 13 || (body.len() != 13 && body.len() != 13 + 8192) {
             return Err(Error::Protocol("Invalid AST hardware cursor packet".into()));
         }
-        if body[0] > 1 {
-            return Err(Error::Protocol("Unknown AST cursor type".into()));
-        }
         let offset_x = u16::from_le_bytes(body[9..11].try_into().unwrap());
         let offset_y = u16::from_le_bytes(body[11..13].try_into().unwrap());
         if offset_x > 64 || offset_y > 64 {
@@ -523,7 +520,9 @@ impl Cursor {
     }
     /// Overlay on a copy. The decoder's background and differential state stay intact.
     pub fn overlay(&self, width: u32, height: u32, rgba: &mut [u8]) {
-        if self.pixels.len() != 4096 {
+        // HardwareCursor.oN logs unknown formats and skips drawing, keeping
+        // the KVM connection alive for the remaining video/input streams.
+        if self.pixels.len() != 4096 || self.kind > 1 {
             return;
         }
         for row in 0..64 - self.offset_y {

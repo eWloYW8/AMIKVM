@@ -281,18 +281,9 @@ pub fn absolute_mouse(
     ])
 }
 
+#[derive(Default)]
 pub struct Fragments {
     data: Vec<u8>,
-    next: u16,
-}
-
-impl Default for Fragments {
-    fn default() -> Self {
-        Self {
-            data: Vec::new(),
-            next: 0,
-        }
-    }
 }
 
 impl Fragments {
@@ -301,23 +292,17 @@ impl Fragments {
             return Err(Error::Protocol("Truncated video fragment".into()));
         }
         let number = u16::from_le_bytes([body[0], body[1]]);
-        let index = number & 0x7fff;
-        if index == 0 {
+        // FragReader uses the low bits only to identify a new frame (zero),
+        // and the high bit to identify its end. TCP provides ordering; the
+        // original never requires intermediate values to increment by one.
+        if number & 0x7fff == 0 {
             self.data.clear();
-            self.next = 0;
-        }
-        if index != self.next {
-            self.data.clear();
-            self.next = 0;
-            return Err(Error::Protocol("Video fragment sequence gap".into()));
         }
         if self.data.len() + body.len() - 2 > MAX_PACKET {
             return Err(Error::Protocol("Video frame exceeds limit".into()));
         }
         self.data.extend_from_slice(&body[2..]);
-        self.next = self.next.wrapping_add(1);
         if number & 0x8000 != 0 {
-            self.next = 0;
             Ok(Some(std::mem::take(&mut self.data)))
         } else {
             Ok(None)

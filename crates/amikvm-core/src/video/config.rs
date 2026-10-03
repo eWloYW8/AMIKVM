@@ -22,11 +22,14 @@ pub fn host_display_available(status: Option<u16>, configured: Option<bool>) -> 
 
 impl EngineConfig {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() != 8 || bytes[6] > 3 || bytes[2] > 7 {
+        // VideoEngineConfigs reads the first eight bytes without rejecting
+        // unknown setting values. Preserve them for an unrelated change and
+        // validate only settings chosen by the user in change().
+        if bytes.len() < 8 {
             return Err(Error::Protocol("Invalid AST engine configuration".into()));
         }
         Ok(Self {
-            bytes: bytes.try_into().unwrap(),
+            bytes: bytes[..8].try_into().unwrap(),
             compression: bytes[6],
             quality: bytes[2],
         })

@@ -27,9 +27,8 @@ pub fn hello(status: u16, body: &[u8], single_port: bool, local_macs: &[[u8; 6]]
     if first || single_port {
         return Ok(first);
     }
-    if body.len() % 48 != 0 {
-        return Err(VideoSessionError::InvalidClientList.into());
-    }
+    // KVMClient uses bodyLength / 48 and inspects complete MAC slots only.
+    // A trailing OEM extension does not invalidate the client list.
     if body
         .chunks_exact(48)
         .any(|slot| mac(slot).is_some_and(|mac| mac != [0; 6] && local_macs.contains(&mac)))
