@@ -2060,6 +2060,28 @@ impl Session {
                 self.keyboard.lock().await.release_key(code, key, *location);
                 return Ok(());
             }
+            // JViewer replaces its normal key listener during calibration.
+            // Route the wizard before menu shortcuts, including Alt+T and Full.
+            let calibration = self
+                .snapshot
+                .lock()
+                .ok()
+                .filter(|s| s.can_control && s.mouse.active())
+                .and_then(|s| s.mouse.token);
+            if let Some(token) = calibration {
+                self.sender
+                    .send(Outgoing::Mouse(crate::mouse::Operation::Key {
+                        code: code.clone(),
+                        key: key.clone(),
+                        location: *location,
+                        pressed: *pressed,
+                        modifiers: *modifiers,
+                        token,
+                    }))
+                    .await
+                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
+                return Ok(());
+            }
             let local = if *pressed {
                 let (options, mouse_mode) = self
                     .snapshot
@@ -2216,23 +2238,6 @@ impl Session {
                     .unwrap_or(true);
             if blocked {
                 self.keyboard.lock().await.release_key(code, key, *location);
-                return Ok(());
-            }
-            let token = self
-                .snapshot
-                .lock()
-                .ok()
-                .filter(|s| s.mouse.active())
-                .and_then(|s| s.mouse.token);
-            if let Some(token) = token {
-                self.sender
-                    .send(Outgoing::Mouse(crate::mouse::Operation::Key {
-                        code: input::physical::resolved_code(code, key, *location).into(),
-                        pressed: *pressed,
-                        token,
-                    }))
-                    .await
-                    .map_err(|_| Error::Protocol("Connection closed".into()))?;
                 return Ok(());
             }
         }

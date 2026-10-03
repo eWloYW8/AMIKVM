@@ -24,7 +24,10 @@ pub enum Operation {
     },
     Key {
         code: String,
+        key: String,
+        location: u8,
         pressed: bool,
+        modifiers: Option<input::routing::Modifiers>,
         token: Uuid,
     },
     Pointer(input::Event),
@@ -87,13 +90,23 @@ pub fn process(
         } => ((Some((command, token)), None, None), Some(reply)),
         Operation::Key {
             code,
+            key,
+            location,
             pressed,
+            modifiers,
             token,
-        } => ((None, Some((code, pressed, token)), None), None),
+        } => (
+            (
+                None,
+                Some((code, key, location, pressed, modifiers, token)),
+                None,
+            ),
+            None,
+        ),
         Operation::Pointer(event) => ((None, None, Some(event)), None),
     };
     let result = (|| {
-        if operation.2.is_some() && !pointer_owner(app, snapshot) {
+        if (operation.1.is_some() || operation.2.is_some()) && !pointer_owner(app, snapshot) {
             return Ok(Effect::default());
         }
         let current = operation
@@ -110,11 +123,20 @@ pub fn process(
             ));
         }
         let mut command = operation.0;
-        if let Some((code, pressed, token)) = operation.1 {
+        if let Some((code, key, location, pressed, modifiers, token)) = operation.1 {
             if s.mouse.token != Some(token) {
                 return Ok(Effect::default());
             }
-            command = s.mouse.key(&code, pressed).map(|c| (c, Some(token)));
+            command = s
+                .mouse
+                .key(input::physical::Key {
+                    code: &code,
+                    key: &key,
+                    location,
+                    pressed,
+                    modifiers,
+                })
+                .map(|c| (c, Some(token)));
         }
         if let Some((command, token)) = command {
             let start = matches!(command, Command::Start);

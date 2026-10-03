@@ -298,37 +298,66 @@ impl State {
         }
     }
     /// All calibration keys are local and must not enter the remote keyboard report.
-    pub fn key(&mut self, code: &str, pressed: bool) -> Option<Command> {
-        match code {
-            "AltLeft" => {
-                if pressed {
-                    self.alt |= 1
-                } else {
-                    self.alt &= !1
+    pub fn key(&mut self, event: super::physical::Key<'_>) -> Option<Command> {
+        // Calibration owns raw local keys. Its commands do not use the remote
+        // layout, and modifier flags survive start/focus clearing remote keys.
+        let code = super::physical::resolved_code(event.code, event.key, event.location);
+        if let Some(modifiers) = event.modifiers {
+            self.alt = u8::from(modifiers.alt && !modifiers.alt_graph && event.key != "AltGraph");
+        } else {
+            match code {
+                "AltLeft" => {
+                    if event.pressed {
+                        self.alt |= 1
+                    } else {
+                        self.alt &= !1
+                    }
                 }
-            }
-            "AltRight" => {
-                if pressed {
-                    self.alt |= 2
-                } else {
-                    self.alt &= !2
+                "AltRight" => {
+                    if event.pressed && event.key != "AltGraph" {
+                        self.alt |= 2
+                    } else {
+                        self.alt &= !2
+                    }
                 }
+                _ => {}
             }
-            _ => {}
         }
-        if !pressed {
+        if !event.pressed {
             return None;
         }
+        let code = match event.key {
+            "-" => "Minus",
+            "+" | "=" => "Equal",
+            "t" | "T" => "KeyT",
+            "Enter" | "Escape" => event.key,
+            "Dead" | "Unidentified" | "AltGraph" => return None,
+            key if key.chars().count() == 1 => return None,
+            _ => code,
+        };
         match code {
-            "Minus" | "NumpadSubtract" => Some(Command::Adjust {
-                direction: -1,
-                fine: self.alt != 0,
-            }),
-            "Equal" | "NumpadAdd" => Some(Command::Adjust {
-                direction: 1,
-                fine: self.alt != 0,
-            }),
-            "KeyT" if self.alt != 0 => Some(Command::Detected),
+            "Minus" | "NumpadSubtract"
+                if matches!(self.stage, Stage::Threshold | Stage::Acceleration) =>
+            {
+                Some(Command::Adjust {
+                    direction: -1,
+                    fine: self.alt != 0,
+                })
+            }
+            "Equal" | "NumpadAdd"
+                if matches!(self.stage, Stage::Threshold | Stage::Acceleration) =>
+            {
+                Some(Command::Adjust {
+                    direction: 1,
+                    fine: self.alt != 0,
+                })
+            }
+            "KeyT"
+                if self.alt != 0
+                    && matches!(self.stage, Stage::Threshold | Stage::Acceleration) =>
+            {
+                Some(Command::Detected)
+            }
             "Enter" | "NumpadEnter"
                 if matches!(
                     self.stage,
