@@ -1,4 +1,7 @@
 {
+  "暂无服务器": ["No servers", "Aucun serveur"],
+  "暂无收藏服务器": ["No favorite servers", "Aucun serveur favori"],
+  "暂无最近连接": ["No recent connections", "Aucune connexion récente"],
   "KVM 认证失败：会话 token 无效": ["KVM authentication failed: invalid session token", "Échec de l’authentification KVM : jeton de session invalide"],
   "KVM 认证失败：账号没有 KVM 权限": ["KVM authentication failed: this account has no KVM privilege", "Échec de l’authentification KVM : ce compte ne dispose pas du droit KVM"],
   "KVM 认证失败：重连会话信息无效": ["KVM authentication failed: invalid session information for reconnect", "Échec de l’authentification KVM : informations de session invalides pour la reconnexion"],

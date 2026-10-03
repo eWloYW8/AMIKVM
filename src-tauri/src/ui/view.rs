@@ -26,18 +26,7 @@ fn logs(ui: &UiState, servers: &[Server]) -> Node {
             "div",
             "page-heading",
             vec![
-                group(
-                    "div",
-                    "",
-                    vec![
-                        label("h1", "", tr("诊断日志")),
-                        label(
-                            "p",
-                            "",
-                            tr("查看连接、设备与操作状态，导出用于排查问题的记录。"),
-                        ),
-                    ],
-                ),
+                group("div", "", vec![label("h1", "", tr("诊断日志"))]),
                 button(
                     "button secondary",
                     if s.file.is_some() {
@@ -69,13 +58,6 @@ fn logs(ui: &UiState, servers: &[Server]) -> Node {
                 ],
             )],
         ),
-        label(
-            "p",
-            "input-help",
-            tr(
-                "调试级别包含报文类型和长度；不记录密码、认证令牌或输入文本。文件日志持续追加，停止或退出时保存。",
-            ),
-        ),
         node(
             "form",
             json!({"key":format!("log-filter-{:?}-{:?}-{:?}-{}",ui.log_filter.minimum,ui.log_filter.category,ui.log_filter.server,ui.log_filter.query),"values":{"minimum":ui.log_filter.minimum,"category":ui.log_filter.category.map(|c|c.value()).unwrap_or(""),"server":ui.log_filter.server.map(|id|id.to_string()).unwrap_or_default(),"query":ui.log_filter.query},"action":{"action":"log_filter"}}),
@@ -101,11 +83,7 @@ fn logs(ui: &UiState, servers: &[Server]) -> Node {
             )],
         ),
     ];
-    controls.push(label(
-        "p",
-        "input-help",
-        tr("在控制台中，Ctrl+Shift+L 开始或停止文件日志，Ctrl+F1 打开关于窗口。"),
-    ));
+
     if let Some(path) = &s.file {
         controls.push(label("p", "record-path", path.display()));
     }
@@ -185,9 +163,6 @@ fn logs(ui: &UiState, servers: &[Server]) -> Node {
         row.props["key"] = json!(entry.sequence);
         rows.push(row);
     }
-    if rows.is_empty() {
-        rows.push(label("p", "input-help", tr("没有匹配的日志记录。")));
-    }
     controls.push(group("div", "log-list", rows));
     controls.push(group(
         "div",
@@ -214,11 +189,7 @@ fn logs(ui: &UiState, servers: &[Server]) -> Node {
 }
 
 fn about() -> Node {
-    let mut rows = vec![heading(
-        tr("关于 AMIKVM"),
-        tr("远程控制台与虚拟介质"),
-        "Monitor",
-    )];
+    let mut rows = vec![heading(tr("关于 AMIKVM"), "Monitor")];
     for (caption, value) in [
         (tr("应用版本"), env!("CARGO_PKG_VERSION")),
         (tr("核心版本"), amikvm_core::VERSION),
@@ -235,11 +206,7 @@ fn about() -> Node {
             vec![label("span", "", caption), label("strong", "", value)],
         ));
     }
-    rows.push(label(
-        "p",
-        "input-help",
-        tr("视频解码、输入转换和虚拟介质由 Rust 实现；运行不需要 Java/JVM 或原版 JNI。"),
-    ));
+
     rows.push(label("h3", "", tr("第三方许可 · fatfs")));
     rows.push(label(
         "p",
@@ -276,7 +243,10 @@ fn recovery_message(snapshot: &Snapshot) -> String {
 }
 
 fn connection_info(server: &Server, snapshot: Option<&Snapshot>) -> Node {
-    let mut rows = vec![heading(tr("连接信息"), &server.name, "Info")];
+    let mut rows = vec![heading(
+        &format!("{} · {}", tr("连接信息"), server.name),
+        "Info",
+    )];
     if let Some(snapshot) = snapshot {
         if let Some(config) = &snapshot.config {
             for (caption, value) in [
@@ -366,11 +336,6 @@ fn connection_info(server: &Server, snapshot: Option<&Snapshot>) -> Node {
                 ],
             ));
         }
-        if snapshot.service.services.is_empty() {
-            rows.push(label("p", "input-help", tr("服务器尚未提供服务配置。")));
-        }
-    } else {
-        rows.push(label("p", "input-help", tr("请先连接服务器")));
     }
     rows.push(group(
         "div",
@@ -459,17 +424,13 @@ fn status(s: Option<&Snapshot>) -> &'static str {
         _ => "",
     }
 }
-fn heading(title: &str, subtitle: &str, image: &str) -> Node {
+fn heading(title: &str, image: &str) -> Node {
     group(
         "div",
         "modal-heading",
         vec![
             group("div", "modal-icon", vec![icon(image, 23)]),
-            group(
-                "div",
-                "",
-                vec![label("h2", "", title), label("p", "", subtitle)],
-            ),
+            group("div", "", vec![label("h2", "", title)]),
             titled("X", tr("关闭"), json!({"action":"close_dialog"}), false),
         ],
     )
@@ -581,9 +542,6 @@ pub fn build(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Node {
         ));
     }
     let navigation_count = session_nav.len();
-    if session_nav.is_empty() {
-        session_nav.push(label("p", "", tr("连接服务器后，控制台会显示在这里。")));
-    }
     let sidebar = group(
         "aside",
         "sidebar",
@@ -593,14 +551,7 @@ pub fn build(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Node {
                 "brand",
                 vec![
                     node("image", json!({"src":"/brand.svg","alt":""}), vec![]),
-                    group(
-                        "span",
-                        "",
-                        vec![
-                            label("span", "", "AMIKVM"),
-                            label("small", "", tr("REMOTE CONSOLE")),
-                        ],
-                    ),
+                    group("span", "", vec![label("span", "", "AMIKVM")]),
                 ],
             ),
             label("div", "workspace-label", tr("工作空间")),
@@ -687,15 +638,12 @@ pub fn build(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Node {
             group(
                 "div",
                 "topbar-controls",
-                vec![
-                    label("span", "topbar-caption", tr("远程访问，尽在掌握")),
-                    select(
-                        "language",
-                        tr("界面语言"),
-                        &[("zh-CN", "简体中文"), ("en", "English"), ("fr", "Français")],
-                        json!({"className":"language-select","key":"interface-language","value":ui.language.code(),"action":{"action":"set_language"},"disabled":ui.close_plan.is_some()}),
-                    ),
-                ],
+                vec![select(
+                    "language",
+                    tr("界面语言"),
+                    &[("zh-CN", "简体中文"), ("en", "English"), ("fr", "Français")],
+                    json!({"className":"language-select","key":"interface-language","value":ui.language.code(),"action":{"action":"set_language"},"disabled":ui.close_plan.is_some()}),
+                )],
             ),
         ],
     );
@@ -840,15 +788,7 @@ fn server_page(
             "div",
             "page-heading",
             vec![
-                group(
-                    "div",
-                    "",
-                    vec![
-                        label("div", "eyebrow", tr("YOUR INFRASTRUCTURE")),
-                        label("h1", "", title),
-                        label("p", "", tr("集中管理你的服务器，连接远程控制台。")),
-                    ],
-                ),
+                group("div", "", vec![label("h1", "", title)]),
                 button(
                     "button primary",
                     tr("添加服务器"),
@@ -873,17 +813,10 @@ fn server_page(
             tr("没有找到匹配的服务器")
         } else {
             match ui.view {
-                View::All | View::Logs => tr("你的下一次连接，从这里开始"),
-                View::Favorites => tr("收藏你的常用服务器"),
-                View::Recent => tr("你的连接记录会出现在这里"),
+                View::All | View::Logs => tr("暂无服务器"),
+                View::Favorites => tr("暂无收藏服务器"),
+                View::Recent => tr("暂无最近连接"),
             }
-        };
-        let caption = if !ui.query.is_empty() {
-            tr("试试其他名称、地址或备注。")
-        } else if servers.is_empty() {
-            tr("添加服务器的 BMC 地址，建立你的远程工作空间。")
-        } else {
-            tr("从所有服务器中选择一台，开始连接。")
         };
         let mut empty = vec![
             group(
@@ -896,7 +829,6 @@ fn server_page(
                 ],
             ),
             label("h2", "", title),
-            label("p", "", caption),
         ];
         if servers.is_empty() {
             empty.push(button(
@@ -907,18 +839,7 @@ fn server_page(
                 false,
             ));
         }
-        empty.push(group(
-            "div",
-            "empty-features",
-            [
-                ("Monitor", tr("远程控制台")),
-                ("Keyboard", tr("快捷键输入")),
-                ("ShieldCheck", tr("安全连接")),
-            ]
-            .iter()
-            .map(|(i, t)| group("span", "", vec![icon(i, 15), label("span", "", t)]))
-            .collect(),
-        ));
+
         children.push(group("div", "empty-state", empty));
     } else {
         children.push(group(
@@ -930,21 +851,7 @@ fn server_page(
                 .collect(),
         ));
     }
-    children.push(group(
-        "footer",
-        "page-footer",
-        vec![
-            group(
-                "span",
-                "",
-                vec![
-                    icon("LockKeyhole", 11),
-                    label("span", "", tr("凭据由系统凭据库保管")),
-                ],
-            ),
-            label("span", "", "Windows · Linux · macOS"),
-        ],
-    ));
+
     group("div", "server-page", children)
 }
 
@@ -1054,15 +961,6 @@ fn card(ui: &UiState, s: &Server, snapshot: Option<&Snapshot>) -> Node {
                     label("span", "", &s.username),
                 ],
             ),
-            label(
-                "p",
-                "server-notes",
-                if s.notes.is_empty() {
-                    tr("远程管理控制器")
-                } else {
-                    &s.notes
-                },
-            ),
             group(
                 "div",
                 "card-footer",
@@ -1114,7 +1012,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 "dialog",
                 json!({"key":format!("confirmation-{}",confirmation.id),"className":"modal","action":{"action":"close_dialog"}}),
                 vec![
-                    heading(tr("确认操作"), tr("请核对以下操作。"), "ShieldCheck"),
+                    heading(tr("确认操作"), "ShieldCheck"),
                     label(
                         "p",
                         "confirmation-message",
@@ -1151,11 +1049,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 "dialog",
                 json!({"key":format!("sharing-{id}"),"className":"modal modal-wide","action":{"action":"close_dialog"}}),
                 vec![
-                    heading(
-                        tr("共享会话与控制权限"),
-                        tr("查看活动用户、应答权限申请和移交控制。"),
-                        "Users",
-                    ),
+                    heading(tr("共享会话与控制权限"), "Users"),
                     sharing(server, snapshot, controllable),
                     group(
                         "div",
@@ -1175,11 +1069,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             let snapshot = sessions.iter().find(|s| s.server_id == id);
             let controllable = snapshot.is_some_and(|s| s.video_connected && s.can_control);
             let mut children = vec![
-                heading(
-                    tr("IPMI 命令"),
-                    tr("发送原始命令，查看对应的十六进制和 ASCII 响应。"),
-                    "TerminalSquare",
-                ),
+                heading(tr("IPMI 命令"), "TerminalSquare"),
                 group(
                     "div",
                     "capture-actions",
@@ -1202,7 +1092,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                     },
                     state.response_error.as_deref().unwrap_or_default(),
                 ));
-                let mut records: Vec<_> = state.records.iter().rev().map(|record| {
+                let records: Vec<_> = state.records.iter().rev().map(|record| {
                     let mut parts = vec![
                         group("div", "ipmi-record-heading", vec![
                             label("strong", "", lformat!("#{} · {} · 编号 {}", record.sequence, tr(record.operation.label()), record.request_id)),
@@ -1224,15 +1114,12 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                     if let Some(message) = &record.message { parts.push(label("p", "input-help", translated(message))); }
                     node("element", json!({"tag":"article","key":record.sequence,"className":"ipmi-record"}), parts)
                 }).collect();
-                if records.is_empty() {
-                    records.push(label("p", "input-help", tr("尚无命令记录。")));
-                }
                 children.push(group("div", "ipmi-history", records));
             }
             children.extend([
                 select("format", tr("输入格式"), &[("hex", tr("十六进制")), ("ascii", "ASCII")], json!({"disabled":!controllable})),
                 field("command", tr("原始命令"), "textarea", json!({"required":true,"disabled":!controllable,"rows":3,"autoFocus":true,"placeholder":"00 01"})),
-                label("p", "input-help", tr("十六进制以空格分隔，支持 0x 前缀；ASCII 原样转为字节。非显示字符在记录中显示为点。")),
+
                 group("div", "modal-actions", vec![button("button secondary", tr("关闭"), "", json!({"action":"close_dialog"}), false), node("button", json!({"className":"button primary","text":tr("发送命令"),"type":"submit","disabled":!controllable}), vec![])]),
             ]);
             (
@@ -1250,7 +1137,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             let controllable = snapshot.is_some_and(|s| s.video_connected && s.can_control);
             let disabled = !controllable || boot.busy();
             let mut children = vec![
-                heading(tr("启动选项"), tr("选择启动设备和生效次数。"), "Power"),
+                heading(tr("启动选项"), "Power"),
                 group(
                     "div",
                     "capture-actions",
@@ -1319,7 +1206,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             children.extend([
                 select("device", tr("启动设备"), &choices, json!({"disabled":disabled || boot.options.is_none()})),
                 field("nextBootOnly", tr("仅下次启动"), "checkbox", json!({"className":"checkbox","disabled":disabled || boot.options.is_none()})),
-                label("p", "input-help", tr("取消勾选后持续生效。应用后请通过服务器电源操作启动或重启。")),
+
                 group("div", "modal-actions", vec![button("button secondary", tr("关闭"), "", json!({"action":"close_dialog"}), false), node("button", json!({"className":"button primary","text":tr("应用"),"type":"submit","disabled":disabled || boot.phase != BootPhase::Ready || boot.options.is_none()}), vec![])]),
             ]);
             let values = json!({"device":boot.options.as_ref().map_or("no_change", |o|o.device.map_or("unknown", |d| d.value())),"nextBootOnly":boot.options.as_ref().is_none_or(|o|o.next_boot_only)});
@@ -1340,11 +1227,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 .kind
                 .unwrap_or(amikvm_core::video::remote_capture::Kind::Preview);
             let mut children = vec![
-                heading(
-                    tr(kind.label()),
-                    tr("抓取、刷新或保存服务器捕获的画面。"),
-                    "Camera",
-                ),
+                heading(tr(kind.label()), "Camera"),
                 group(
                     "div",
                     "capture-actions",
@@ -1435,11 +1318,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 .iter()
                 .any(|s| s.server_id == id && s.phase == "connected");
             let mut children = vec![
-                heading(
-                    tr("BMC 录像"),
-                    tr("查看服务器保存的录像，下载或在本机回放。"),
-                    "Video",
-                ),
+                heading(tr("BMC 录像"), "Video"),
                 button(
                     "button secondary",
                     tr("刷新列表"),
@@ -1464,7 +1343,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                     "div",
                     "macro-row",
                     vec![
-                        label("span", "macro-description", progress),
+                        label("span", "macro-content", progress),
                         button(
                             "button secondary",
                             tr("取消操作"),
@@ -1478,15 +1357,12 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             let mut rows = vec![];
             for entry in &recordings.entries {
                 rows.push(group("div", "macro-row", vec![
-                    group("div", "macro-description", vec![label("strong", "", &entry.name), label("small", "", &entry.info), label("small", "", &entry.file)]),
+                    group("div", "macro-content", vec![label("strong", "", &entry.name)]),
                     group("div", "macro-actions", vec![
                         button("button secondary", tr("下载"), "", json!({"action":"recordings_download","id":id,"file":entry.file,"play":false}), busy || !connected),
                         button("button primary", tr("回放"), "Play", json!({"action":"recordings_download","id":id,"file":entry.file,"play":true}), busy || !connected),
                     ]),
                 ]));
-            }
-            if recordings.loaded && rows.is_empty() {
-                rows.push(label("p", "input-help", tr("服务器没有可用录像。")));
             }
             children.push(group("div", "macro-list", rows));
             if let Some(path) = &recordings.saved_path {
@@ -1521,22 +1397,13 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 })
             });
             let mut children = vec![
-                heading(
-                    tr("用户组合键"),
-                    tr("保存常用按键组合，在控制台一键发送。"),
-                    "Keyboard",
-                ),
+                heading(tr("用户组合键"), "Keyboard"),
                 button(
                     "button primary",
                     tr("添加组合键"),
                     "Plus",
                     json!({"action":"macro_edit","id":id,"macro_id":null}),
                     ui.macros.len() >= amikvm_core::input::macros::MAX_MACROS,
-                ),
-                label(
-                    "p",
-                    "input-help",
-                    lformat!("已保存 {} / 20 个 · 每个组合最多 6 个按键", ui.macros.len()),
                 ),
             ];
             let mut rows = vec![];
@@ -1572,26 +1439,12 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                     "div",
                     "macro-row",
                     vec![
-                        group(
-                            "div",
-                            "macro-description",
-                            vec![
-                                label("strong", "", &m.name),
-                                label("small", "", m.description()),
-                            ],
-                        ),
+                        group("div", "macro-content", vec![label("strong", "", &m.name)]),
                         group("div", "macro-actions", buttons),
                     ],
                 );
                 row.props["key"] = json!(m.id);
                 rows.push(row);
-            }
-            if rows.is_empty() {
-                rows.push(label(
-                    "p",
-                    "input-help",
-                    tr("还没有用户组合键。添加后会自动保存，供所有服务器使用。"),
-                ));
             }
             children.push(group("div", "macro-list", rows));
             (
@@ -1645,17 +1498,9 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                         } else {
                             tr("添加组合键")
                         },
-                        tr("这些按键将同时按下，然后释放。"),
                         "Keyboard",
                     ),
                     group("div", "form-grid", fields),
-                    label(
-                        "p",
-                        "input-help",
-                        tr(
-                            "左右 Ctrl、Shift、Alt 和 Win / Command 分别选择。Tab、Print Screen 和系统组合键也可直接从列表中选取。",
-                        ),
-                    ),
                     actions(tr("保存组合键")),
                 ],
             )
@@ -1747,7 +1592,6 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                         } else {
                             tr("添加服务器")
                         },
-                        tr("保存连接信息，随时进入远程控制台。"),
                         "Server",
                     ),
                     group("div", "form-grid", fields),
@@ -1763,11 +1607,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 json!({"action":"password","id":id,"capture":capture}),
                 json!({"password":""}),
                 vec![
-                    heading(
-                        &lformat!("连接 {}", s.name),
-                        &format!("{}@{}", s.username, s.host),
-                        "KeyRound",
-                    ),
+                    heading(&lformat!("连接 {}", s.name), "KeyRound"),
                     field(
                         "password",
                         tr("连接密码"),
@@ -1811,11 +1651,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 json!({"action":"folder_start","id":id}),
                 json!({"slot":slots.first().map(|s|s.to_string()).unwrap_or_default(),"size":256,"readonly":true}),
                 vec![
-                    heading(
-                        tr("重定向文件夹"),
-                        tr("将本地文件夹映射为远程 USB 存储。"),
-                        "FolderOpen",
-                    ),
+                    heading(tr("重定向文件夹"), "FolderOpen"),
                     selector,
                     field(
                         "size",
@@ -1829,13 +1665,6 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                         "checkbox",
                         json!({"className":"checkbox"}),
                     ),
-                    label(
-                        "p",
-                        "input-help",
-                        tr(
-                            "随后选择文件夹和工作镜像的新文件名。关闭只读后，可以停止连接、预览修改，再同步回原文件夹。工作镜像须保存在文件夹之外。",
-                        ),
-                    ),
                     actions(tr("选择文件夹和工作镜像")),
                 ],
             )
@@ -1844,11 +1673,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             let folder = ui.folders.iter().find(|f| f.id == id)?;
             let conflicts = !folder.conflicts.is_empty();
             let mut children = vec![
-                heading(
-                    tr("同步文件夹修改"),
-                    tr("检查远程修改后再写回本地文件夹。"),
-                    "FolderSync",
-                ),
+                heading(tr("同步文件夹修改"), "FolderSync"),
                 label("p", "record-path", &folder.root),
                 label(
                     "p",
@@ -1867,13 +1692,6 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 .map(|c| label("p", "mono", format!("{}  {}", c.operation, c.path)))
                 .collect();
             children.push(group("div", "folder-changes", changes));
-            if folder.changes.len() > 100 {
-                children.push(label(
-                    "small",
-                    "",
-                    tr("预览显示前 100 项；同步会处理全部变化。"),
-                ));
-            }
             if conflicts {
                 children.push(label(
                     "p",
@@ -1974,11 +1792,6 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                             Kind::Floppy => tr("重定向软盘镜像"),
                         }
                     },
-                    if physical {
-                        tr("选择本机设备，连接为远程服务器的虚拟介质。列表会自动刷新。")
-                    } else {
-                        tr("选择镜像后作为远程服务器的 USB 介质使用。")
-                    },
                     "HardDrive",
                 ),
                 selector,
@@ -2013,18 +1826,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 ));
                 if let Some(error) = &ui.devices.error {
                     fields.push(label("p", "media-error", translated(error)));
-                } else if entries.is_empty() && !ui.devices.loading {
-                    fields.push(label(
-                        "p",
-                        "input-help",
-                        tr("没有找到此类型的实体设备。连接设备后可刷新列表，或改用镜像文件。"),
-                    ));
                 }
-                fields.push(label(
-                    "p",
-                    "input-help",
-                    tr("访问实体设备需要系统授予相应权限；设备移除后连接会自动结束。"),
-                ));
             }
             if !cd {
                 fields.push(field(
@@ -2041,33 +1843,12 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                         json!({"className":"checkbox"}),
                     ));
                 }
-                fields.push(label(
-                    "p",
-                    "input-help",
-                    if physical {tr("关闭只读后，远程写入将直接修改实体设备。Windows 会尝试锁定卷；Linux 和 macOS 请先卸载本地文件系统。")}else{tr("关闭只读后，远程系统的写入会保存到所选镜像。")},
-                ));
             } else {
                 fields.push(field(
                     "boost",
                     tr("请求 BMC 介质加速模式"),
                     "checkbox",
                     json!({"className":"checkbox"}),
-                ));
-                fields.push(label(
-                    "p",
-                    "input-help",
-                    if physical {
-                        tr("实体 CD/DVD 以只读方式连接。BMC 决定是否允许加速模式。")
-                    } else {
-                        tr("CD/DVD 镜像以只读方式连接。BMC 决定是否允许加速模式。")
-                    },
-                ));
-            }
-            if physical && cfg!(target_os = "macos") && cd {
-                fields.push(label(
-                    "p",
-                    "input-help",
-                    tr("当前 macOS 支持数据光盘、真实轨道表及光盘信息读取；音频光盘和其他光驱控制仍待补齐。"),
                 ));
             }
             let mut footer = actions(if physical {
@@ -2099,11 +1880,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             json!({"action":"text","id":id}),
             json!({"mode":sessions.iter().find(|s| s.server_id == id).map_or("us", |s| s.keyboard_options.text_mode.id()),"text":""}),
             vec![
-                heading(
-                    tr("输入文本"),
-                    tr("选择远程系统的 Unicode 输入方式。"),
-                    "Keyboard",
-                ),
+                heading(tr("输入文本"), "Keyboard"),
                 select(
                     "mode",
                     tr("远程系统"),
@@ -2121,20 +1898,6 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                     tr("文本"),
                     "textarea",
                     json!({"required":true,"autoFocus":true,"rows":6}),
-                ),
-                label(
-                    "p",
-                    "input-help",
-                    tr(
-                        "Windows 需要启用 EnableHexNumpad；macOS 需要启用 Unicode Hex Input。Linux 使用支持 Ctrl + Shift + U 的输入环境。",
-                    ),
-                ),
-                label(
-                    "p",
-                    "input-help",
-                    tr(
-                        "Word 方式需要远端 Word 支持 Alt + X，可输入中文和非 BMP 字符；其他应用请使用对应输入方式。",
-                    ),
                 ),
                 actions(tr("发送文本")),
             ],
@@ -2757,33 +2520,17 @@ fn mouse_capture(server: &Server, snapshot: Option<&Snapshot>, enabled: bool) ->
         return group("div", "", vec![]);
     };
     let requested = s.mouse_capture.requested();
-    let mut children = vec![
-        button(
-            "button secondary wide",
-            if requested {
-                tr("释放鼠标捕获")
-            } else {
-                tr("开启鼠标捕获")
-            },
-            "Monitor",
-            json!({"action":"mouse_capture","id":server.id,"enabled":!requested}),
-            !requested
-                && (!enabled || !crate::pointer_capture::eligible(s) || s.text_input.active()),
-        ),
-        label(
-            "p",
-            "input-help",
-            if s.mouse_capture.active {
-                tr("鼠标已捕获，移动不受屏幕边缘限制。")
-            } else if requested {
-                tr("点击远端画面开始捕获鼠标。")
-            } else {
-                tr(
-                    "开启后点击画面可持续发送相对移动；Escape 释放，第三种鼠标模式也可用 Alt + C 开关。",
-                )
-            },
-        ),
-    ];
+    let mut children = vec![button(
+        "button secondary wide",
+        if requested {
+            tr("释放鼠标捕获")
+        } else {
+            tr("开启鼠标捕获")
+        },
+        "Monitor",
+        json!({"action":"mouse_capture","id":server.id,"enabled":!requested}),
+        !requested && (!enabled || !crate::pointer_capture::eligible(s) || s.text_input.active()),
+    )];
     if let Some(message) = &s.mouse_capture.message {
         children.push(label("p", "input-help", translated(message)));
     }
@@ -2799,32 +2546,11 @@ fn keyboard_options(server: &Server, snapshot: Option<&Snapshot>, enabled: bool)
             &[("windows", tr("Windows 主机")), ("linux", tr("Linux 主机"))],
             json!({"value":options.host.id(),"disabled":!enabled,"action":{"action":"keyboard_option","id":server.id,"setting":"host"}}),
         ),
-        label(
-            "p",
-            "input-help",
-            tr(
-                "Windows 本机连接 Linux 主机时，AltGr 仅发送右 Alt，避免额外 Ctrl；此选项独立于文本输入方式。",
-            ),
-        ),
         field(
             "full_keyboard",
             tr("全键盘支持"),
             "checkbox",
             json!({"className":"checkbox","value":options.full_keyboard,"disabled":!enabled,"action":{"action":"keyboard_option","id":server.id,"setting":"full_keyboard"}}),
-        ),
-        label(
-            "p",
-            "input-help",
-            tr(
-                "启用后 Ctrl + F1 和本地 Alt 快捷键发送到远端；Ctrl + Shift + L 仍控制本地日志，第三种鼠标模式的 Alt + C 仍开关捕获。系统保留组合键可通过上方按钮发送。",
-            ),
-        ),
-        label(
-            "p",
-            "input-help",
-            tr(
-                "关闭全键盘支持时，点击画面可用 Alt + P 暂停、Alt + R 恢复、Alt + E 刷新、Alt + S 截图、Alt + F 全屏、Alt + N 切换主机显示。",
-            ),
         ),
         field(
             "easy_paste",
@@ -2850,13 +2576,6 @@ fn keyboard_options(server: &Server, snapshot: Option<&Snapshot>, enabled: bool)
             "Keyboard",
             json!({"action":"paste","id":server.id}),
             !enabled,
-        ),
-        label(
-            "p",
-            "input-help",
-            tr(
-                "剪贴板按所选方式转换为键盘输入；不支持的文本会整段拒绝。停止会结束后续输入，已发送内容保留。",
-            ),
         ),
     ];
     if let Some(status) = snapshot.map(|s| &s.text_input) {
@@ -2906,11 +2625,7 @@ fn mouse_calibration(server: &Server, snapshot: Option<&Snapshot>, controllable:
     let default = State::default();
     let state = snapshot.map_or(&default, |s| &s.mouse);
     if !state.active() && !snapshot.is_some_and(|s| s.mouse_mode == Some(1)) {
-        return label(
-            "small",
-            "keyboard-detection",
-            tr("相对鼠标模式提供阈值、倍率校准与左上角同步。"),
-        );
+        return group("div", "", vec![]);
     }
     let enabled =
         controllable && snapshot.is_some_and(|s| s.mouse_mode == Some(1) && s.video_signal);
@@ -2919,13 +2634,6 @@ fn mouse_calibration(server: &Server, snapshot: Option<&Snapshot>, controllable:
     let mut children = vec![label("strong", "", tr("鼠标校准与同步"))];
     if let Some(message) = snapshot.and_then(|s| s.local_cursor.message.as_deref()) {
         children.push(label("p", "input-help", translated(message)));
-    }
-    if snapshot.is_some_and(|s| s.local_cursor.supported) {
-        children.push(label(
-            "p",
-            "input-help",
-            tr("同步和校准会移动本机光标；移动产生的事件不会再次发送给远端。"),
-        ));
     }
     if !state.active() {
         children.push(node("form", json!({"key":format!("mouse-settings-{}-{}-{}",server.id,settings.threshold,settings.acceleration),"values":{"threshold":settings.threshold.to_string(),"gain":settings.multiplier()},"action":{"action":"mouse_settings","id":server.id}}), vec![
@@ -2941,21 +2649,6 @@ fn mouse_calibration(server: &Server, snapshot: Option<&Snapshot>, controllable:
             !enabled,
         ));
     } else {
-        children.push(label(
-            "p",
-            "input-help",
-            match state.stage {
-                Stage::Threshold => {
-                    tr("比较红色参考标记与远端光标。用 + / − 调节阈值，找到首次不同步的读数。")
-                }
-                Stage::ThresholdReview => tr("确认此读数是参考标记与远端光标首次不同步时的阈值。"),
-                Stage::Acceleration => {
-                    tr("用 + / − 调整倍率，Alt + 加减可微调 0.1，找到两者同步的读数。")
-                }
-                Stage::AccelerationReview => tr("确认此倍率能让红色参考标记与远端光标同步。"),
-                _ => "",
-            },
-        ));
         children.push(label(
             "p",
             "input-help",
@@ -3055,11 +2748,6 @@ fn mouse_calibration(server: &Server, snapshot: Option<&Snapshot>, controllable:
             action(json!({"operation":"cancel"})),
             !enabled,
         ));
-        children.push(label(
-            "small",
-            "input-help",
-            tr("点击远端画面后可用 Alt + T 记录读数，Enter 确认，Esc 取消；窗口失焦时暂停。"),
-        ));
     }
     children.push(button(
         "button secondary wide",
@@ -3070,13 +2758,6 @@ fn mouse_calibration(server: &Server, snapshot: Option<&Snapshot>, controllable:
     ));
     if let Some(message) = &state.message {
         children.push(label("small", "input-help", message));
-    }
-    if !enabled {
-        children.push(label(
-            "small",
-            "input-help",
-            tr("校准与同步需要相对模式、远端画面及控制权限。"),
-        ));
     }
     group("div", "mouse-calibration", children)
 }
@@ -3386,14 +3067,13 @@ fn soft_keyboard(
         !enabled,
     ));
     for m in &ui.macros {
-        let mut b = button(
+        let b = button(
             "button secondary",
             &m.name,
             "",
             json!({"action":"macro_run","id":server.id,"macro_id":m.id}),
             !enabled,
         );
-        b.props["title"] = json!(m.description());
         macros.push(b);
     }
     let mut layout_choices = vec![("follow", tr("跟随键盘布局"))];
@@ -3408,11 +3088,6 @@ fn soft_keyboard(
         &layout_choices,
         json!({"value":ui.soft_layout.get(&server.id).map_or("follow",|l|l.id()),"action":{"action":"soft_layout","id":server.id}}),
     );
-    let layout_note = if let Some(layout) = resolved {
-        lformat!("{} · 远端系统需使用对应布局", layout.label())
-    } else {
-        tr("尚未识别本机布局，暂用 US 字符；可在此手动选择。").into()
-    };
     group(
         "section",
         "soft-keyboard",
@@ -3422,7 +3097,6 @@ fn soft_keyboard(
                 "keyboard-heading",
                 vec![
                     label("strong", "", tr("软键盘")),
-                    label("small", "", tr("点击保持修饰键；普通按键支持按住。")),
                     button(
                         "button secondary push-right",
                         tr("释放所有按键"),
@@ -3438,14 +3112,7 @@ fn soft_keyboard(
                     ),
                 ],
             ),
-            group(
-                "div",
-                "keyboard-layout-picker",
-                vec![
-                    layout_picker,
-                    label("small", "keyboard-detection", &layout_note),
-                ],
-            ),
+            group("div", "keyboard-layout-picker", vec![layout_picker]),
             group(
                 "div",
                 "keyboard-scroll",
@@ -3634,11 +3301,7 @@ fn sharing(server: &Server, snapshot: Option<&Snapshot>, controllable: bool) -> 
             ("view_only", tr("自动仅允许查看")),
             ("deny", tr("自动拒绝访问")),
         ], json!({"key":format!("sharing-policy-{}",server.id),"value":sharing.policy.value(),"action":{"action":"sharing_policy","id":server.id},"disabled":!controllable})));
-        children.push(label(
-            "p",
-            "input-help",
-            tr("自动策略作用于后续申请；控制权限由 BMC 确认。"),
-        ));
+
         children.push(label(
             "p",
             "input-help",
@@ -4038,21 +3701,12 @@ fn recording(ui: &UiState, server: &Server, snapshot: Option<&Snapshot>) -> Node
         children.push(node("form", json!({"key":format!("record-settings-{}",server.id),"values":{"seconds":ui.recording_seconds.get(&server.id).copied().unwrap_or(20).to_string(),"policy":policy.value()},"action":{"action":"record","id":server.id}}), vec![
             field("seconds", tr("录制时长（秒）"), "number", json!({"min":1,"max":1800,"required":true})),
             select("policy", tr("分辨率与无信号策略"), &[(Policy::Normalized.value(), tr(Policy::Normalized.label())), (Policy::NativeSegments.value(), tr(Policy::NativeSegments.label()))], json!({})),
-            label("small", "record-path", tr("统一模式记录无信号画面；原分辨率模式跳过无信号时间，尺寸变化时分文件。")),
+
             node("button", json!({"className":"button secondary wide","text":tr("开始录制"),"icon":"Circle","type":"submit","disabled":!snapshot.is_some_and(|s|s.video_connected && s.phase == "connected")}), vec![]),
         ]));
     }
-    children.push(label(
-        "small",
-        "record-path",
-        tr("达到指定时长后自动保存；暂停时间不计入时长。"),
-    ));
+
     if let Some(snapshot) = snapshot.filter(|s| s.recording || s.recording_path.is_some()) {
-        children.push(label(
-            "small",
-            "record-path",
-            tr(snapshot.recording_policy.description()),
-        ));
         children.push(label(
             "small",
             "record-path",
@@ -4072,13 +3726,6 @@ fn recording(ui: &UiState, server: &Server, snapshot: Option<&Snapshot>) -> Node
                     playback_time(snapshot.recording_skipped_ms)
                 ),
             ));
-            if running && snapshot.recording_outputs.is_empty() {
-                children.push(label(
-                    "small",
-                    "record-path",
-                    tr("等待视频信号，尚未生成录像文件。"),
-                ));
-            }
         }
         if let Some(message) = &snapshot.recording_message {
             children.push(label("small", "record-path", message));
@@ -4154,11 +3801,6 @@ fn playback(ui: &UiState) -> Node {
             vec![
                 icon("Video", 42),
                 label("h1", "", tr("录像回放")),
-                label(
-                    "p",
-                    "input-help",
-                    tr("打开 AMIKVM 录制的 MP4，或从 BMC 下载的 AST 录像。"),
-                ),
                 button(
                     "button primary",
                     tr("打开录像文件"),
@@ -4326,7 +3968,7 @@ fn exit_dialog(plan: &amikvm_core::sharing::exit::Plan) -> Node {
     let choosing = plan.phase == Phase::Choosing;
     let cancellable = matches!(plan.phase, Phase::Preparing | Phase::Choosing);
     let cancel = json!({"action":"exit_cancel","plan":plan.id});
-    let mut h = heading(title, tr("选择仍在线的用户接管控制，或直接关闭。"), "Users");
+    let mut h = heading(title, "Users");
     h.children[2].props["action"] = cancel.clone();
     h.children[2].props["disabled"] = json!(!cancellable);
     let mut children = vec![
@@ -4359,11 +4001,7 @@ fn exit_dialog(plan: &amikvm_core::sharing::exit::Plan) -> Node {
             children.push(label("p", "media-error", translated(message)));
         }
     }
-    children.push(label(
-        "p",
-        "input-help",
-        tr("转交会结束该会话的活动介质重定向；关闭前保存录像，未同步的文件夹工作镜像保留。"),
-    ));
+
     for message in &plan.messages {
         children.push(label("p", "media-error", translated(message)));
     }
