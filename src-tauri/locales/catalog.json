@@ -2757,5 +2757,17 @@
     "Impossible de déplacer le curseur local. Le calibrage est suspendu."
   ],
   "启用后 Ctrl + F1 和本地 Alt 快捷键发送到远端；Ctrl + Shift + L 仍控制本地日志，第三种鼠标模式的 Alt + C 仍开关捕获。系统保留组合键可通过上方按钮发送。": ["When enabled, Ctrl + F1 and local Alt shortcuts are sent to the remote host. Ctrl + Shift + L still controls local logging, and Alt + C still toggles capture in the third mouse mode. Use the buttons above for shortcuts reserved by your system.", "Lorsque cette option est activée, Ctrl + F1 et les raccourcis Alt locaux sont envoyés à l’hôte distant. Ctrl + Maj + L contrôle toujours la journalisation locale et Alt + C active ou désactive la capture dans le troisième mode de souris. Utilisez les boutons ci-dessus pour les raccourcis réservés par votre système."],
-  "关闭全键盘支持时，点击画面可用 Alt + P 暂停、Alt + R 恢复、Alt + E 刷新、Alt + S 截图、Alt + F 全屏、Alt + N 切换主机显示。": ["With full keyboard support disabled, click the console to use Alt + P to pause, Alt + R to resume, Alt + E to refresh, Alt + S to capture, Alt + F for fullscreen, and Alt + N to toggle the host display.", "Lorsque la prise en charge complète du clavier est désactivée, cliquez sur la console : Alt + P met en pause, Alt + R reprend, Alt + E actualise, Alt + S capture, Alt + F passe en plein écran et Alt + N bascule l’affichage de l’hôte."]
+  "关闭全键盘支持时，点击画面可用 Alt + P 暂停、Alt + R 恢复、Alt + E 刷新、Alt + S 截图、Alt + F 全屏、Alt + N 切换主机显示。": ["With full keyboard support disabled, click the console to use Alt + P to pause, Alt + R to resume, Alt + E to refresh, Alt + S to capture, Alt + F for fullscreen, and Alt + N to toggle the host display.", "Lorsque la prise en charge complète du clavier est désactivée, cliquez sur la console : Alt + P met en pause, Alt + R reprend, Alt + E actualise, Alt + S capture, Alt + F passe en plein écran et Alt + N bascule l’affichage de l’hôte."],
+  "虚拟介质认证失败：会话 token 无效": ["Virtual media authentication failed: invalid session token", "Échec de l’authentification du média virtuel : jeton de session invalide"],
+  "账号没有虚拟介质重定向权限": ["This account has no virtual media redirection privilege", "Ce compte ne dispose pas du droit de redirection de média virtuel"],
+  "CD/DVD 介质会话数量已达上限，请稍后重试": ["The CD/DVD media session limit has been reached; retry later", "La limite de sessions CD/DVD est atteinte ; réessayez plus tard"],
+  "磁盘介质会话数量已达上限，请稍后重试": ["The disk media session limit has been reached; retry later", "La limite de sessions de disque est atteinte ; réessayez plus tard"],
+  "虚拟介质重定向需要有效许可证": ["Virtual media redirection requires a valid license", "La redirection de média virtuel nécessite une licence valide"],
+  "虚拟介质实例正由本地或远程介质客户端使用": ["This virtual media instance is in use by a local or remote media client", "Cette instance de média virtuel est utilisée par un client de média local ou distant"],
+  "虚拟介质实例正由其他客户端使用": ["This virtual media instance is in use by another client", "Cette instance de média virtuel est utilisée par un autre client"],
+  "BMC 拒绝了虚拟介质连接": ["The BMC rejected the virtual media connection", "Le BMC a refusé la connexion de média virtuel"],
+  "虚拟介质认证响应缺少状态码": ["The virtual media authentication response has no status code", "La réponse d’authentification du média virtuel ne contient aucun code d’état"],
+  "BMC 未返回虚拟介质认证确认": ["The BMC did not return a virtual media authentication acknowledgement", "Le BMC n’a pas renvoyé de confirmation d’authentification du média virtuel"],
+  "占用客户端：{}": ["Client using the instance: {}", "Client utilisant l’instance : {}"],
+  "BMC 介质返回码：{}": ["BMC media response code: {}", "Code de réponse du média BMC : {}"]
 }

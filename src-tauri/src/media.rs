@@ -221,6 +221,9 @@ impl Manager {
                 let mut status = pending;
                 status.phase = "error".into();
                 status.message = Some(error.to_string());
+                if let Error::MediaSession(reason) = &error {
+                    status.rejection = Some(*reason);
+                }
                 self.update(status);
                 return Err(error);
             }

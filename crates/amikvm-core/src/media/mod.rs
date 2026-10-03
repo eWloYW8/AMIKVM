@@ -5,6 +5,7 @@ pub mod folder;
 mod nrg;
 pub mod redirect;
 pub mod scsi;
+pub mod session;
 use crate::{Error, Result};
 use tokio::io::{AsyncRead, AsyncReadExt};
 

@@ -8,6 +8,8 @@ pub enum Error {
     SinglePort(#[from] SinglePortRejection),
     #[error("{0}")]
     VideoSession(#[from] VideoSessionError),
+    #[error("{0}")]
+    MediaSession(#[from] MediaSessionError),
     #[error("BMC protocol error: {0}")]
     Protocol(String),
     #[error("Operation timed out: {0}")]
@@ -107,3 +109,64 @@ impl std::fmt::Display for VideoSessionError {
 }
 
 impl std::error::Error for VideoSessionError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MediaSessionError {
+    InvalidToken,
+    NoPrivilege,
+    SessionLimit {
+        cd: bool,
+        owner: Option<std::net::IpAddr>,
+    },
+    LicenseRequired,
+    OccupiedLocal {
+        code: u8,
+    },
+    Occupied {
+        code: u8,
+        owner: std::net::IpAddr,
+    },
+    Rejected {
+        code: u8,
+    },
+    MissingStatus,
+    UnexpectedAcknowledgement {
+        opcode: Option<u8>,
+    },
+}
+
+impl MediaSessionError {
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::InvalidToken => "虚拟介质认证失败：会话 token 无效",
+            Self::NoPrivilege => "账号没有虚拟介质重定向权限",
+            Self::SessionLimit { cd: true, .. } => "CD/DVD 介质会话数量已达上限，请稍后重试",
+            Self::SessionLimit { cd: false, .. } => "磁盘介质会话数量已达上限，请稍后重试",
+            Self::LicenseRequired => "虚拟介质重定向需要有效许可证",
+            Self::OccupiedLocal { .. } => "虚拟介质实例正由本地或远程介质客户端使用",
+            Self::Occupied { .. } => "虚拟介质实例正由其他客户端使用",
+            Self::Rejected { .. } => "BMC 拒绝了虚拟介质连接",
+            Self::MissingStatus => "虚拟介质认证响应缺少状态码",
+            Self::UnexpectedAcknowledgement { .. } => "BMC 未返回虚拟介质认证确认",
+        }
+    }
+
+    pub fn owner(self) -> Option<std::net::IpAddr> {
+        match self {
+            Self::Occupied { owner, .. }
+            | Self::SessionLimit {
+                owner: Some(owner), ..
+            } => Some(owner),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for MediaSessionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.message())
+    }
+}
+
+impl std::error::Error for MediaSessionError {}

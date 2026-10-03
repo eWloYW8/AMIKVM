@@ -45,6 +45,7 @@ pub struct Status {
     pub boost: bool,
     pub phase: String,
     pub message: Option<String>,
+    pub rejection: Option<crate::error::MediaSessionError>,
     pub bytes_read: u64,
     pub bytes_written: u64,
     pub requests: u64,
@@ -71,6 +72,7 @@ impl Status {
             boost,
             phase: "connecting".into(),
             message: None,
+            rejection: None,
             bytes_read: 0,
             bytes_written: 0,
             requests: 0,
@@ -181,37 +183,9 @@ impl Redirector {
         let ack = timeout(Duration::from_secs(15), read(&mut connection.stream))
             .await
             .map_err(|_| Error::Timeout("Media authentication"))??;
-        if ack.opcode()? != 241 {
-            return Err(Error::Protocol(
-                "Expected media redirection acknowledgement".into(),
-            ));
-        }
-        let code = ack
-            .body
-            .get(30)
-            .copied()
-            .ok_or_else(|| Error::Protocol("Missing media authentication status".into()))?;
-        if !(code == 1 || cd && [27, 28].contains(&code)) {
-            let other = ack
-                .body
-                .get(31..)
-                .map(|v| {
-                    String::from_utf8_lossy(v)
-                        .trim_matches(['\0', ' '])
-                        .to_owned()
-                })
-                .unwrap_or_default();
-            return Err(Error::Authentication(match code {
-                3 => "BMC rejected the media session token".into(),
-                5 => "Virtual media permission denied".into(),
-                8 => "BMC media session limit reached".into(),
-                13 => "BMC virtual media license expired".into(),
-                _ if !other.is_empty() => format!("Media instance is in use by {other}"),
-                _ => format!("BMC rejected virtual media ({code})"),
-            }));
-        }
-        status.instance = ack.instance();
-        status.boost = cd && code == 27;
+        let acknowledgement = super::session::acknowledge(&ack, cd)?;
+        status.instance = acknowledgement.instance;
+        status.boost = acknowledgement.boost;
         status.phase = "connected".into();
         let physical = image.lock().unwrap().physical();
         let (device_tx, mut device_rx) = watch::channel(Some(status.capacity));

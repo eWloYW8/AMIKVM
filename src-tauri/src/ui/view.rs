@@ -3857,6 +3857,22 @@ fn media(server: &Server, snapshot: Option<&Snapshot>) -> Node {
             if let Some(message) = &m.message {
                 item.push(label("small", "media-error", translated(message)));
             }
+            if let Some(reason) = m.rejection {
+                if let Some(owner) = reason.owner() {
+                    item.push(label(
+                        "small",
+                        "media-error",
+                        lformat!("占用客户端：{}", owner),
+                    ));
+                }
+                if let amikvm_core::error::MediaSessionError::Rejected { code } = reason {
+                    item.push(label(
+                        "small",
+                        "media-error",
+                        lformat!("BMC 介质返回码：{}", code),
+                    ));
+                }
+            }
             children.push(group("div", "session-user", item));
         }
     }
