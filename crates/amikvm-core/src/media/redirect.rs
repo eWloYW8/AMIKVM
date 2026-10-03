@@ -230,10 +230,13 @@ impl Redirector {
             let mut heartbeat = tokio::time::interval(Duration::from_millis(500));
             let mut last_received = Instant::now();
             let mut last_sent = Instant::now();
+            let mut last_keepalive = Instant::now();
             let mut published_requests = 0;
             let result: Result<()> = async {
                 loop {
-                    let reading = timeout(Duration::from_secs(90), read(&mut reader));
+                    // Keep this read across timer ticks, including partial packets.
+                    // An idle authenticated media channel has no reply deadline.
+                    let reading = read(&mut reader);
                     tokio::pin!(reading);
                     let request = loop {
                         tokio::select! {
@@ -245,7 +248,7 @@ impl Redirector {
                                 if changed.is_err(){return Err(Error::Protocol("Physical device monitor stopped".into()));}
                                 state.capacity=capacity.unwrap();status_tx.send_replace(state.clone());
                             }
-                            request = &mut reading => break Some(request.map_err(|_| Error::Timeout("Virtual media response"))??),
+                            request = &mut reading => break Some(request?),
                             _ = heartbeat.tick() => {
                                 let mut cache_changed = false;
                                 if let Ok(image) = image.try_lock() {
@@ -258,10 +261,12 @@ impl Redirector {
                                     published_requests=state.requests;
                                     last_notification=Instant::now();
                                 }
-                                if last_sent.elapsed()>=Duration::from_secs(60) || last_received.elapsed()>=Duration::from_secs(60) {
+                                if (last_sent.elapsed()>=Duration::from_secs(60) || last_received.elapsed()>=Duration::from_secs(60))
+                                    && last_keepalive.elapsed()>=Duration::from_secs(2) {
                                     let bytes=Packet::command(243,state.instance,&[]).encode()?;
                                     timeout(Duration::from_secs(15),writer.write_all(&bytes)).await.map_err(|_|Error::Timeout("Media keepalive"))??;
                                     last_sent=Instant::now();
+                                    last_keepalive=last_sent;
                                 }
                             }
                         }
