@@ -788,17 +788,16 @@ impl Session {
                             break;
                         }
                         22 => {
-                            return Err(Error::Authentication(
-                                "BMC session limit reached or access denied".into(),
-                            ));
+                            return Err(amikvm_core::error::VideoSessionError::SessionLimit(header.status).into());
                         }
                         23 => {
-                            first_client = body.is_empty();
-                            if header.status != 0 && header.status != 2 {
-                                return Err(Error::Protocol(
-                                    "BMC uses a different video SoC".into(),
-                                ));
-                            }
+                            let local_macs = if !body.is_empty() && !web.config.single_port {
+                                mac_address::MacAddressIterator::new()
+                                    .map_err(|_| amikvm_core::error::VideoSessionError::LocalAddressesUnavailable)?
+                                    .map(|mac| mac.bytes())
+                                    .collect::<Vec<_>>()
+                            } else { vec![] };
+                            first_client = protocol::session::hello(header.status, &body, web.config.single_port, &local_macs)?;
                             if authentication_sent { continue; }
                             let auth = web.authentication_packet(
                                 &connection.local_address.ip().to_string(),
@@ -825,12 +824,14 @@ impl Session {
                                 .map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                             authentication_sent = true;
                         }
-                        19 if !approved => {
-                            if body.first() != Some(&1) {
-                                return Err(Error::Authentication(format!(
-                                    "Video session rejected ({})",
-                                    body.first().copied().unwrap_or(0)
-                                )));
+                        19 => {
+                            let session_id = protocol::session::validation(&body, authentication_sent)?;
+                            // A later refusal still terminates the session. A
+                            // repeated success must not reset confirmed control
+                            // permissions or re-send post-authentication traffic.
+                            if approved {
+                                update(&app, &worker_snapshot, |s| s.own_session_id = session_id);
+                                continue;
                             }
                             approved = true;
                             if previous.is_none() {
@@ -852,13 +853,15 @@ impl Session {
                                 s.video_connected = true;
                                 let confirmed_role = s.sharing.role;
                                 s.sharing.authenticated(first_client);
-                                if let Some((_, role)) = previous {
-                                    s.sharing.role = if confirmed_role == amikvm_core::sharing::Role::Disconnected { role } else { confirmed_role };
+                                if confirmed_role != amikvm_core::sharing::Role::Disconnected {
+                                    s.sharing.role = confirmed_role;
+                                } else if let Some((_, role)) = previous {
+                                    s.sharing.role = role;
                                 }
                                 s.recovery.authenticated();
                                 s.message = None;
                                 s.can_control = s.sharing.can_control();
-                                s.own_session_id = body.get(1).copied();
+                                s.own_session_id = session_id;
                             });
                             worker_sender.send(Outgoing::PowerStatus).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                             worker_ready.store(true, Ordering::Release);

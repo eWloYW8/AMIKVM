@@ -6,6 +6,8 @@ pub enum Error {
     Authentication(String),
     #[error("{0}")]
     SinglePort(#[from] SinglePortRejection),
+    #[error("{0}")]
+    VideoSession(#[from] VideoSessionError),
     #[error("BMC protocol error: {0}")]
     Protocol(String),
     #[error("Operation timed out: {0}")]
@@ -64,3 +66,44 @@ impl std::fmt::Display for SinglePortRejection {
 }
 
 impl std::error::Error for SinglePortRejection {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoSessionError {
+    Validation(u8),
+    SessionLimit(u16),
+    MissingValidationStatus,
+    UnexpectedValidation,
+    UnsupportedSoc(u16),
+    InvalidClientList,
+    LocalAddressesUnavailable,
+}
+
+impl VideoSessionError {
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::Validation(0) => "KVM 认证失败：会话 token 无效",
+            Self::Validation(2) => "KVM 认证失败：账号没有 KVM 权限",
+            Self::Validation(3) => "KVM 认证失败：重连会话信息无效",
+            Self::Validation(6) => "KVM 认证失败：重连客户端 IP 不匹配",
+            Self::Validation(7) => "KVM 认证失败：重连客户端 MAC 不匹配",
+            Self::Validation(8) => "KVM 认证失败：重连会话信息不存在",
+            Self::Validation(_) => "BMC 拒绝了 KVM 会话认证",
+            Self::SessionLimit(0) => "KVM 会话数量已达上限，请关闭其他会话后重试",
+            Self::SessionLimit(1) => "同一客户端只能连接此 BMC 的一个 KVM 会话",
+            Self::SessionLimit(_) => "BMC 拒绝了 KVM 会话连接",
+            Self::MissingValidationStatus => "KVM 认证响应缺少状态码",
+            Self::UnexpectedValidation => "尚未请求 KVM 认证，BMC 已返回成功响应",
+            Self::UnsupportedSoc(_) => "BMC 的视频芯片与 AST 客户端不匹配",
+            Self::InvalidClientList => "BMC 的 KVM 客户端地址列表长度无效",
+            Self::LocalAddressesUnavailable => "无法读取本机网络接口以检查重复 KVM 会话",
+        }
+    }
+}
+
+impl std::fmt::Display for VideoSessionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.message())
+    }
+}
+
+impl std::error::Error for VideoSessionError {}

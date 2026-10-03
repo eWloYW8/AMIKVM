@@ -1,4 +1,6 @@
 //! IVTP framing and IUSB input reports. Source: e/j.java, c/j.java and c/l.java.
+pub mod session;
+
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 
