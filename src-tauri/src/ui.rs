@@ -1,6 +1,7 @@
 //! Rust owns navigation, forms, presentation models, action routing and input conversion.
 //! The webview renders this declarative tree and forwards browser interaction data.
 mod devices;
+mod files;
 mod view;
 
 use crate::{
@@ -1981,20 +1982,15 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
             let app = app.clone();
             let path = tauri::async_runtime::spawn_blocking(move || {
                 let file = app.dialog().file();
-                match kind {
-                    amikvm_core::media::scsi::Kind::Cdrom => file.add_filter(
-                        crate::locale::text_in(language, "CD/DVD 镜像"),
-                        &[
-                            "iso", "isO", "iSo", "iSO", "Iso", "IsO", "ISo", "ISO", "nrg", "nrG",
-                            "nRg", "nRG", "Nrg", "NrG", "NRg", "NRG",
-                        ],
-                    ),
-                    _ => file.add_filter(
-                        crate::locale::text_in(language, "磁盘镜像"),
-                        &["img", "ima", "bin"],
-                    ),
-                }
-                .blocking_pick_file()
+                let extensions = files::image_extensions(kind);
+                let extension_refs = extensions.iter().map(String::as_str).collect::<Vec<_>>();
+                let label = if kind == amikvm_core::media::scsi::Kind::Cdrom {
+                    "CD/DVD 镜像"
+                } else {
+                    "磁盘镜像"
+                };
+                file.add_filter(crate::locale::text_in(language, label), &extension_refs)
+                    .blocking_pick_file()
             })
             .await
             .map_err(|e| e.to_string())?;
