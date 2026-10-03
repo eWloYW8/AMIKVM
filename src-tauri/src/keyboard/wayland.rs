@@ -18,6 +18,10 @@ struct Bridge {
     keys: RefCell<Releases<gdk::EventKey>>,
 }
 impl Bridge {
+    fn cancel(&self) {
+        let releases = self.keys.borrow_mut().cancel(0); // GDK_CURRENT_TIME
+        self.deliver(releases);
+    }
     fn deliver(&self, releases: Vec<(gdk::EventKey, u32)>) {
         if !self.active.get() {
             return;
@@ -75,14 +79,17 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
     let source = seat.clone();
     let keyboard = observer.clone();
     window.connect_key_press_event(move |_, event| {
-        if pressed.active.get()
-            && !event.is_send_event()
-            && event.seat().as_ref() == Some(&source)
-            && keyboard
-                .borrow()
-                .as_ref()
-                .is_some_and(|k| event.source_device().as_ref() == Some(&k.device))
-        {
+        if !event.is_send_event() && event.seat().as_ref() == Some(&source) {
+            if !pressed.active.get()
+                || !keyboard
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|k| event.source_device().as_ref() == Some(&k.device))
+            {
+                // GDK can dispatch an old press after the capability change.
+                // It must not reach the focused widget and become stuck there.
+                return glib::Propagation::Stop;
+            }
             let releases = pressed.keys.borrow_mut().capture(
                 event.hardware_keycode(),
                 event.time(),
@@ -97,14 +104,16 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
     let source = seat.clone();
     let keyboard = observer.clone();
     window.connect_key_release_event(move |_, event| {
-        if released.active.get()
-            && !event.is_send_event()
-            && event.seat().as_ref() == Some(&source)
-            && keyboard
-                .borrow()
-                .as_ref()
-                .is_some_and(|k| event.source_device().as_ref() == Some(&k.device))
-        {
+        if !event.is_send_event() && event.seat().as_ref() == Some(&source) {
+            if !released.active.get()
+                || !keyboard
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|k| event.source_device().as_ref() == Some(&k.device))
+            {
+                // Cancellation already supplied the old device's releases.
+                return glib::Propagation::Stop;
+            }
             released
                 .keys
                 .borrow_mut()
@@ -136,7 +145,7 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
             .as_ref()
             .is_some_and(|k| &k.device == device)
         {
-            removed.keys.borrow_mut().clear();
+            removed.cancel();
             keyboard.borrow_mut().take();
         }
     });
@@ -146,6 +155,7 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
         .display()
         .connect_seat_removed(move |_, removed_seat| {
             if removed_seat == &seat {
+                removed.cancel();
                 removed.active.set(false);
                 removed.keys.borrow_mut().clear();
                 keyboard.borrow_mut().take();

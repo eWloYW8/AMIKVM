@@ -103,6 +103,18 @@ impl<T> Releases<T> {
     pub fn drain(&mut self) -> Vec<(T, u32)> {
         self.take(|_, _| true)
     }
+    /// Finish a lost device's delivered presses without inventing key-downs.
+    /// Preserve actual release order, then unwind held chords in reverse order.
+    pub fn cancel(&mut self, time: u32) -> Vec<(T, u32)> {
+        let mut releases = self.drain();
+        releases.extend(
+            self.frames
+                .drain(..)
+                .rev()
+                .filter_map(|frame| frame.snapshot.map(|snapshot| (snapshot, time))),
+        );
+        releases
+    }
     fn take(&mut self, before: impl Fn(u32, u64) -> bool) -> Vec<(T, u32)> {
         let mut releases = vec![];
         let mut keep = Vec::with_capacity(self.frames.len());
