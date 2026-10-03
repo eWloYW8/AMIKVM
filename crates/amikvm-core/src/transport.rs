@@ -14,6 +14,8 @@ use tokio::{
     time::timeout,
 };
 
+mod single_port;
+
 pub trait AsyncSocket: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncSocket for T {}
 pub type Socket = Pin<Box<dyn AsyncSocket>>;
@@ -94,25 +96,7 @@ impl WebSession {
             })
             .await
             .map_err(|_| Error::Timeout("Single-port handshake write"))??;
-            // Read one byte at a time so the following binary packet is retained.
-            let response = timeout(Duration::from_secs(10), async {
-                let mut response = Vec::new();
-                loop {
-                    let byte = stream.read_u8().await?;
-                    response.push(byte);
-                    if byte == b'\n' || response.len() >= 512 {
-                        break;
-                    }
-                }
-                Ok::<_, std::io::Error>(response)
-            })
-            .await
-            .map_err(|_| Error::Timeout("Single-port handshake"))??;
-            if response.windows(5).any(|s| s == b"ERROR") {
-                return Err(Error::Authentication(
-                    "BMC rejected single-port connection".into(),
-                ));
-            }
+            single_port::confirmation(&mut stream).await?;
         }
         Ok(Connection {
             stream,
