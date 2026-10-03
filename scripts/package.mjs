@@ -17,7 +17,7 @@ const { values } = parseArgs({ options: {
   help: { type: 'boolean', short: 'h' },
 } });
 if (values.help) {
-  console.log('Usage: pnpm package [--target <Rust triple>] [--runner <Cargo runner>]');
+  console.log('Usage: pnpm package [--target <Rust triple or universal-apple-darwin>] [--runner <Cargo runner>]');
   process.exit(0);
 }
 function run(command, args, options = {}) {
@@ -33,7 +33,8 @@ if (!buildTarget || !/^[a-z0-9_-]+$/.test(buildTarget)) throw new Error('Invalid
 const platform = buildTarget.includes('-windows-') ? 'windows'
   : buildTarget.includes('-linux-') ? 'linux'
   : buildTarget.endsWith('-apple-darwin') ? 'macos' : undefined;
-const architecture = { x86_64: 'x64', i686: 'ia32', aarch64: 'arm64' }[buildTarget.split('-')[0]];
+const architecture = buildTarget === 'universal-apple-darwin' ? 'universal'
+  : { x86_64: 'x64', i686: 'ia32', aarch64: 'arm64' }[buildTarget.split('-')[0]];
 if (!platform || !architecture) throw new Error(`Unsupported package target: ${buildTarget}`);
 if (platform === 'windows' && !buildTarget.endsWith('-msvc')) {
   throw new Error('Windows single-file packages require an MSVC target; GNU builds depend on WebView2Loader.dll');

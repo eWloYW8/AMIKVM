@@ -144,7 +144,8 @@ export function validateMacosBundle(path, expectedArchitecture, expected) {
   const binaries = new Map(), visited = new Set(), systemImports = new Set();
   const inspect = file => { if (!binaries.has(file)) binaries.set(file, inspectMacosBinary(file)); return binaries.get(file); };
   const mainSlices = inspect(main);
-  if (!mainSlices.some(s => s.architecture === expectedArchitecture) || mainSlices.some(s => s.filetype !== 2)) throw new Error('macOS executable architecture/type mismatch');
+  const requiredArchitectures = expectedArchitecture === 'universal' ? ['x64', 'arm64'] : [expectedArchitecture];
+  if (requiredArchitectures.some(architecture => !mainSlices.some(s => s.architecture === architecture)) || mainSlices.some(s => s.filetype !== 2)) throw new Error('macOS executable architecture/type mismatch');
   function expand(value, loader) {
     for (const [token, base] of [['@executable_path', dirname(main)], ['@loader_path', dirname(loader)]]) {
       if (value === token || value.startsWith(`${token}/`)) return resolve(base, value.slice(token.length + 1));

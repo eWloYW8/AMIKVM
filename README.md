@@ -70,6 +70,15 @@ Windows 单文件使用 MSVC 目标，Rust 和 OpenH264 的运行库以及 WebVi
 
 macOS 打包保留框架内的相对符号链接和可执行权限，在临时目录核对应用标识、版本、图标、Mach-O 架构、最低系统版本及递归库依赖。检查通过后才替换已有 `.app`；检查失败会保留旧产物，替换失败会尝试恢复。依赖必须来自系统或应用自身，不得指向构建目录或 Java/JVM/JNI 库。这些结构检查不代替 macOS 本机启动验证。
 
+在 macOS 上可构建同时包含 Intel 和 Apple Silicon 的通用应用：
+
+```sh
+rustup target add x86_64-apple-darwin aarch64-apple-darwin
+pnpm package --target universal-apple-darwin
+```
+
+通用包的主程序必须包含两个架构，引用的内部库也必须覆盖对应架构；产物仍为 `artifacts/AMIKVM.app`。这是 [Tauri 支持的通用目标](https://v2.tauri.app/distribute/app-store/)，不会改变应用的交付形式。
+
 Linux 主机也可按 [Tauri 的 Windows 交叉编译方式](https://v2.tauri.app/distribute/windows-installer/#build-windows-apps-on-linux-and-macos) 安装 LLVM（`clang-cl`、`lld-link`、`llvm-rc` 在 PATH 中）、Windows Rust 目标和 `cargo-xwin` 后运行：
 
 ```sh
@@ -82,7 +91,7 @@ pnpm package --target x86_64-pc-windows-msvc
 
 本地已生成 Linux x64 的 `artifacts/AMIKVM-0.1.0-linux-x64.tar.zip`，并在 Debian 13 检查了解压后独立启动与退出。这是当前开发版本，仍需继续补齐完整功能。
 
-本地也已交叉构建 `artifacts/AMIKVM-0.1.0-windows-x64.exe` 并检查其嵌入资源和系统 DLL 导入；尚未在 Windows 本机运行。macOS 产物尚未构建。
+本地也已交叉构建 `artifacts/AMIKVM-0.1.0-windows-x64.exe` 并检查其嵌入资源和系统 DLL 导入；尚未在 Windows 本机运行。macOS Intel 和 ARM64 目标的完整 Rust 工作区已通过编译检查，OpenH264 和 Objective-C 异常桥接代码实际编译为对应 Mach-O 对象；完整 `.app` 尚未链接、构建或在 macOS 本机运行。
 
 ## 数据保存
 
