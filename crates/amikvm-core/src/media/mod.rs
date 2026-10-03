@@ -94,7 +94,10 @@ impl Packet {
 pub async fn read<R: AsyncRead + Unpin>(stream: &mut R) -> Result<Packet> {
     let mut header = [0; 32];
     stream.read_exact(&mut header).await?;
-    if &header[..8] != b"IUSB    " || header[8] != 1 || header[10] != 32 {
+    // PacketMaster.receivePacket always reads a fixed 32-byte media header,
+    // and IUSBHeader.read validates only its signature. Some BMCs leave the
+    // version and header-length fields zero, including in successful ACKs.
+    if &header[..8] != b"IUSB    " {
         return Err(Error::Protocol("Invalid IUSB media header".into()));
     }
     let length = u32::from_le_bytes(header[12..16].try_into().unwrap()) as usize;
