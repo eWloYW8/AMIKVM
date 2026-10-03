@@ -3,6 +3,7 @@ use amikvm_core::input::layout::{self, Layout};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 pub mod locks;
+pub mod native;
 
 #[derive(Default, Clone, PartialEq)]
 pub struct Snapshot {

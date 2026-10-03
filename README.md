@@ -76,7 +76,7 @@ pnpm package --target x86_64-pc-windows-msvc
 
 `vendor/fatfs` 保留 fatfs 0.3.6 及其 MIT 许可，修正 UTF-16 长文件名验证，并添加 FAT 修改时间与只读属性设置；变更说明位于 `vendor/fatfs/AMIKVM-CHANGES.md`，许可同时嵌入桌面资源 `licenses/fatfs.txt`。
 
-用户组合键支持创建、编辑、删除和持久保存，每个组合最多 6 个按键、最多保存 20 个，并区分左右修饰键。软键盘提供原版 22 套字符布局、Shift/Caps/AltGr 字符层、日文专用键，支持普通按键按住、修饰键保持、数字键盘和 BMC 锁定键指示；实体键盘失焦时释放实体按键，关闭软键盘、切换控制台或应用失焦时释放对应的保持状态。键盘布局支持原版 18 种选择及自动识别；Linux X11 的系统布局与活动组切换已直接验证，Windows/macOS 识别代码和 Wayland 边界仍待目标平台核对。
+用户组合键支持创建、编辑、删除和持久保存，每个组合最多 6 个按键、最多保存 20 个，并区分左右修饰键。组合键目录与实体输入也覆盖原版的 Help、Stop、Again、Undo、Cut、Copy、Paste、Find、Cancel、Clear 和 Separator 扩展键；这些键发送远端 HID。软键盘提供原版 22 套字符布局、Shift/Caps/AltGr 字符层、日文专用键，支持普通按键按住、修饰键保持、数字键盘和 BMC 锁定键指示；实体键盘失焦时释放实体按键，关闭软键盘、切换控制台或应用失焦时释放对应的保持状态。键盘布局支持原版 18 种选择及自动识别；Linux X11 的系统布局与活动组切换已直接验证，Windows/macOS 识别代码和 Wayland 边界仍待目标平台核对。
 
 远端键盘主机类型默认为 Windows，可选择 Linux；Windows 本机连接 Linux 时，Rust 延迟处理左 Ctrl 并排除 AltGr 的合成 Ctrl，正常 Ctrl 组合键继续发送。AltGr 字符输入不触发本地菜单快捷键。实体修饰键与常见控制键尊重本机重映射及左右位置，AltGraph 可来自其他键位或未识别的物理 code；按下时保存映射，释放时沿用，多个来源共享同一远端按键时直到全部释放才松开。主机类型独立于下方 Unicode 文本输入方式，软键盘和用户组合键继续按明确选择的左右按键发送。
 

@@ -1889,6 +1889,23 @@ impl Session {
             }
             return Ok(());
         }
+        #[cfg(target_os = "linux")]
+        if let Event::Key {
+            code,
+            key,
+            pressed: true,
+            modifiers,
+            ..
+        } = &mut event
+        {
+            if key == "Unidentified" {
+                if let Some(logical) =
+                    crate::keyboard::native::logical_key(&self.input_app, code, *modifiers).await
+                {
+                    *key = logical.into();
+                }
+            }
+        }
         if matches!(
             &event,
             Event::Key { pressed: true, .. } | Event::Pointer { buttons: 1.., .. }

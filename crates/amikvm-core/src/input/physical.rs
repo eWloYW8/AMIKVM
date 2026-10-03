@@ -10,12 +10,15 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Client {
     Windows,
+    Linux,
     Other,
 }
 impl Client {
     pub fn current() -> Self {
         if cfg!(target_os = "windows") {
             Self::Windows
+        } else if cfg!(target_os = "linux") {
+            Self::Linux
         } else {
             Self::Other
         }
@@ -58,6 +61,10 @@ struct Binding {
 /// DOM locations are 1/2 for left/right. AltGraph denotes right Alt even when
 /// its physical source is CapsLock, a virtual key, or a modifier on another side.
 pub fn resolved_code<'a>(code: &'a str, key: &'a str, location: u8) -> &'a str {
+    resolve(code, key, location, Client::current())
+}
+
+fn resolve<'a>(code: &'a str, key: &'a str, location: u8, client: Client) -> &'a str {
     let right = location == 2 || (location != 1 && code.ends_with("Right"));
     match key {
         "AltGraph" => "AltRight",
@@ -89,9 +96,15 @@ pub fn resolved_code<'a>(code: &'a str, key: &'a str, location: u8) -> &'a str {
                 "MetaLeft"
             }
         }
+        // X11's Cancel/SunStop is VK_STOP in the original AWT pipeline. WebKit
+        // names its physical code BrowserStop, but it remains a keyboard Stop.
+        "Cancel" if client == Client::Linux => "Stop",
+        "Redo" => "Again",
         "CapsLock" | "NumLock" | "ScrollLock" | "Backspace" | "Tab" | "Enter" | "Escape"
         | "Insert" | "Delete" | "Home" | "End" | "PageUp" | "PageDown" | "ArrowLeft"
-        | "ArrowRight" | "ArrowUp" | "ArrowDown" | "PrintScreen" | "Pause" | "ContextMenu" => {
+        | "ArrowRight" | "ArrowUp" | "ArrowDown" | "PrintScreen" | "Pause" | "ContextMenu"
+        | "Help" | "Stop" | "Again" | "Undo" | "Cut" | "Copy" | "Paste" | "Find" | "Cancel"
+        | "Clear" | "Separator" => {
             if location == 3 && code.starts_with("Numpad") {
                 code
             } else {
@@ -119,7 +132,7 @@ impl Keyboard {
             modifiers,
         } = event;
         let source = Source::new(code, key, location);
-        let target = self.code_for(code, key, location).to_owned();
+        let target = self.code_for_client(code, key, location, client).to_owned();
         if usage(&target).is_none() {
             return vec![];
         }
@@ -173,10 +186,19 @@ impl Keyboard {
         reports
     }
     pub fn code_for<'a>(&'a self, code: &'a str, key: &'a str, location: u8) -> &'a str {
+        self.code_for_client(code, key, location, Client::current())
+    }
+    fn code_for_client<'a>(
+        &'a self,
+        code: &'a str,
+        key: &'a str,
+        location: u8,
+        client: Client,
+    ) -> &'a str {
         self.held
             .get(&Source::new(code, key, location))
             .map_or_else(
-                || resolved_code(code, key, location),
+                || resolve(code, key, location, client),
                 |binding| binding.code.as_str(),
             )
     }
