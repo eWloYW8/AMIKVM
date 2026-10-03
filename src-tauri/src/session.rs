@@ -70,6 +70,7 @@ pub struct Snapshot {
     #[serde(skip)]
     pub bandwidth_requested: Option<std::time::Instant>,
     pub own_session_id: Option<u8>,
+    pub native_serial: Option<String>,
     pub users: Vec<amikvm_core::sharing::User>,
     pub remote_macros: Option<input::macros::RemoteMacros>,
     pub remote_macro_message: Option<String>,
@@ -134,6 +135,7 @@ impl Snapshot {
             measured_bytes_per_second: None,
             bandwidth_requested: None,
             own_session_id: None,
+            native_serial: None,
             users: vec![],
             remote_macros: None,
             remote_macro_message: None,
@@ -415,6 +417,7 @@ impl Session {
                     s.remote_macro_requested = None;
                     s.remote_macro_expected = None;
                     s.remote_macro_message = None;
+                    s.native_serial = None;
                     s.input_throttled_until = None;
                     if s.recovery.attempt > 0 {
                         s.recovery.authenticating();
@@ -432,6 +435,7 @@ impl Session {
                 let writer_web = web.clone();
                 let writer_app = app.clone();
                 let writer_media = worker_media.clone();
+                let mut media_activity = worker_media.activity();
                 let writer_video = worker_video.clone();
                 let writer_keyboard = worker_keyboard.clone();
                 let writer_text_generation = worker_text_generation.clone();
@@ -441,6 +445,7 @@ impl Session {
                     let mut had_input = false;
                     let mut pointer = input::pointer::State::default();
                     let mut cipher = None;
+                    let mut media_active = false;
                     let result = 'writer: loop {
                         // KVMClient case 61 blocks user input for three seconds.
                         // Keep the read task and keepalives running while the BMC
@@ -738,6 +743,17 @@ impl Session {
                                 },
                                 None => break Ok(()),
                             },
+                            changed = media_activity.changed(), if writer_ready.load(Ordering::Acquire) => {
+                                if changed.is_err() { break Ok(()); }
+                                // CDROMRedir/HarddiskRedir notify KVMClient.L on
+                                // redirect start/stop. Keep the connection active
+                                // while any instance is connected, including folders.
+                                let active = *media_activity.borrow_and_update();
+                                if active != media_active {
+                                    if let Err(error) = transport::write_packet(&mut writer, &protocol::command(24, u16::from(active))).await { break Err(error); }
+                                    media_active = active;
+                                }
+                            }
                             _ = heartbeat.tick(), if writer_ready.load(Ordering::Acquire) => {
                                 if let Err(error) = transport::write_packet(&mut writer, &protocol::command(57, 0)).await { break Err(error); }
                             }
@@ -792,6 +808,7 @@ impl Session {
                 }
                 let authentication_started = std::time::Instant::now();
                 let mut state_clock = tokio::time::interval(Duration::from_secs(1));
+                let mut next_blank_poll = None;
                 'packets: loop {
                     // Timer ticks must not drop a partially read IVTP header/body.
                     let packet_future = transport::read_packet(&mut reader);
@@ -808,11 +825,13 @@ impl Session {
                                     return Err(Error::Timeout("KVM authentication"));
                                 }
                                 let mut query_power = false;
+                                let mut query_hardware = false;
                                 if let Ok(mut snapshot) = worker_snapshot.lock() {
                                     let now = std::time::Instant::now();
                                     let ipmi_changed = snapshot.ipmi.expire(now);
                                     let sharing_changed = snapshot.sharing.expire(now);
                                     let power_changed = snapshot.power.expire(now);
+                                    let mut hardware_changed = false;
                                     let macro_changed = snapshot.remote_macro_requested.is_some_and(|started| started.elapsed() >= Duration::from_secs(10));
                                     if macro_changed {
                                         snapshot.remote_macro_requested = None;
@@ -820,14 +839,29 @@ impl Session {
                                         snapshot.remote_macro_message = Some("服务器未确认保存结果，请刷新后检查".into());
                                     }
                                     query_power = approved && snapshot.power.query_due(now);
+                                    if approved && next_blank_poll.is_some_and(|deadline| now >= deadline) {
+                                        // PowerStatusMonitor.run queries 34 while
+                                        // blank, then 119 if the host is powered off.
+                                        query_power = true;
+                                        query_hardware = snapshot.power.status == Some(0);
+                                        if snapshot.power.status == Some(1) && video_suspended {
+                                            video_suspended = false;
+                                            snapshot.message = Some("No video signal".into());
+                                            hardware_changed = true;
+                                        }
+                                        next_blank_poll = Some(now + Duration::from_secs(30));
+                                    }
                                     snapshot.can_control = snapshot.sharing.can_control();
-                                    if ipmi_changed || sharing_changed || power_changed || macro_changed {
+                                    if ipmi_changed || sharing_changed || power_changed || macro_changed || hardware_changed {
                                         crate::diagnostics::session(&app, &snapshot);
                                         let _ = app.emit("session-state", snapshot.clone());
                                     }
                                 }
                                 if query_power {
                                     worker_sender.send(Outgoing::PowerStatus).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
+                                }
+                                if query_hardware {
+                                    worker_sender.send(Outgoing::Bytes(protocol::command(119, 0))).await.map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                                 }
                             }
                             read = &mut packet_future => break read,
@@ -958,6 +992,7 @@ impl Session {
                             worker_ready.store(true, Ordering::Release);
                         }
                         9 => {
+                            next_blank_poll.get_or_insert_with(std::time::Instant::now);
                             if let Ok(mut video) = worker_video.lock() {
                                 video.no_signal();
                             }
@@ -979,7 +1014,16 @@ impl Session {
                                 s.message = Some(if video_suspended { status } else { "No video signal".into() });
                             });
                         }
+                        129 => {
+                            // KVMClient case 129 updates JVMenu's Native SN
+                            // status label with the NUL-terminated body.
+                            let serial = String::from_utf8_lossy(
+                                body.split(|byte| *byte == 0).next().unwrap_or_default(),
+                            ).into_owned();
+                            update(&app, &worker_snapshot, |s| s.native_serial = Some(serial));
+                        }
                         25 if approved => {
+                            next_blank_poll = None;
                             if let Some(frame) = fragments.push(&body)? {
                                 if decoder.decode(&frame)? && !video_suspended {
                                     if let Ok(mut video) = worker_video.lock() {
@@ -1198,6 +1242,14 @@ impl Session {
                         39 => {
                             let users = amikvm_core::sharing::users(&body)?;
                             update(&app, &worker_snapshot, |s| s.users = users);
+                            if approved {
+                                // KVMClient.nA calls nB after every user-list reply.
+                                // Re-enable LED reports after membership/control changes.
+                                worker_sender
+                                    .send(Outgoing::Bytes(protocol::command(11, 1)))
+                                    .await
+                                    .map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
+                            }
                         }
                         34 if approved => {
                             update(&app, &worker_snapshot, |s| s.power.status_reply(header.status, std::time::Instant::now()))

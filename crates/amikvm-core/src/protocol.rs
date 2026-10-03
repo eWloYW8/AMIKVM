@@ -146,7 +146,6 @@ pub enum Control {
     DetectBandwidth,
     KeyboardLayout { layout: String },
     InputEncryption { enabled: bool },
-    LockLeds { leds: u8 },
     HostDisplay { locked: bool },
     ActiveUsers,
     RequestControl,
@@ -197,9 +196,6 @@ impl Control {
             }
             Self::KeyboardLayout { .. } => Err(Error::Invalid("Invalid keyboard layout".into())),
             Self::InputEncryption { enabled } => Ok(command(if *enabled { 12 } else { 13 }, 0)),
-            Self::LockLeds { .. } => Err(Error::Invalid(
-                "Use HID lock-key events to change remote LEDs".into(),
-            )),
             Self::HostDisplay { locked } => packet(51, 0, &[u8::from(*locked)]),
             Self::ActiveUsers => Ok(command(39, 0)),
             Self::RequestControl => Ok(command(50, 0)),

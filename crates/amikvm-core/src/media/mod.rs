@@ -64,7 +64,9 @@ impl Packet {
         usb: bool,
         boost: bool,
     ) -> Result<Self> {
-        if token.len() > 95 {
+        // The original 160-byte packet writes the token at absolute byte 63
+        // and allows all remaining 97 bytes (CDROMRedir.SendAuth_SessionToken).
+        if token.len() > 97 {
             return Err(Error::Invalid(
                 "Media session token exceeds protocol limit".into(),
             ));

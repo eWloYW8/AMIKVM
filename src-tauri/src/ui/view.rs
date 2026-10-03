@@ -248,6 +248,16 @@ fn connection_info(server: &Server, snapshot: Option<&Snapshot>) -> Node {
         "Info",
     )];
     if let Some(snapshot) = snapshot {
+        if let Some(serial) = &snapshot.native_serial {
+            rows.push(group(
+                "div",
+                "about-row",
+                vec![
+                    label("span", "", tr("原生序列号")),
+                    label("strong", "", serial),
+                ],
+            ));
+        }
         if let Some(config) = &snapshot.config {
             for (caption, value) in [
                 (tr("KVM 端口"), config.kvm_port.to_string()),

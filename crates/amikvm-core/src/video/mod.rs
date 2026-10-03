@@ -204,8 +204,9 @@ impl Decoder {
         };
         // The compressed block grid and presented raster use MH/output geometry
         // (SOCFrameHdr.oy and decoder oK, verified in the original bytecode).
-        // Hardware scaling has already happened; source geometry is metadata,
-        // not an additional software resampling or buffer stride.
+        // Keep our buffers bounded by that output raster. The original uses
+        // MG/source stride for pixel writes despite presenting MH dimensions;
+        // do not reproduce its potential out-of-bounds writes when they differ.
         if self.width != header.width as u32
             || self.height != header.height as u32
             || self.source_width != header.source_width as u32
@@ -497,6 +498,11 @@ pub struct Cursor {
 }
 impl Cursor {
     pub fn update(&mut self, body: &[u8]) -> Result<()> {
+        // HardwareCursorReader resets to HeaderReader for an empty update.
+        // Leave the last cursor intact instead of ending the video session.
+        if body.is_empty() {
+            return Ok(());
+        }
         if body.len() < 13 || (body.len() != 13 && body.len() != 13 + 8192) {
             return Err(Error::Protocol("Invalid AST hardware cursor packet".into()));
         }

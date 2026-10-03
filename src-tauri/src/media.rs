@@ -51,6 +51,7 @@ pub struct Manager {
     parent_cancel: watch::Receiver<bool>,
     closed: AtomicBool,
     generation: watch::Sender<u64>,
+    activity: watch::Sender<bool>,
 }
 impl Manager {
     pub fn new(
@@ -69,10 +70,18 @@ impl Manager {
             parent_cancel,
             closed: AtomicBool::new(false),
             generation: watch::channel(0).0,
+            activity: watch::channel(false).0,
         }
     }
     fn update(&self, value: Status) {
-        update(&self.app, &self.snapshot, value);
+        update(&self.app, &self.snapshot, &self.activity, value);
+    }
+    pub fn activity(&self) -> watch::Receiver<bool> {
+        let mut activity = self.activity.subscribe();
+        // A replacement KVM transport must also announce media that is
+        // already connected, without waiting for another media transition.
+        activity.mark_changed();
+        activity
     }
     pub async fn start(
         &self,
@@ -251,11 +260,12 @@ impl Manager {
         drop(registry);
         let snapshot = self.snapshot.clone();
         let app = self.app.clone();
+        let activity = self.activity.clone();
         tauri::async_runtime::spawn(async move {
             while status.changed().await.is_ok() {
                 let value = status.borrow_and_update().clone();
                 let done = !value.active();
-                update(&app, &snapshot, value);
+                update(&app, &snapshot, &activity, value);
                 if done {
                     break;
                 }
@@ -330,9 +340,10 @@ impl Manager {
         for handle in handles {
             let app = self.app.clone();
             let snapshot = self.snapshot.clone();
+            let activity = self.activity.clone();
             tasks.spawn(async move {
                 handle.stop().await;
-                update(&app, &snapshot, handle.status.borrow().clone());
+                update(&app, &snapshot, &activity, handle.status.borrow().clone());
             });
         }
         while tasks.join_next().await.is_some() {}
@@ -341,7 +352,12 @@ impl Manager {
         }
     }
 }
-fn update(app: &AppHandle, snapshot: &Arc<Mutex<Snapshot>>, value: Status) {
+fn update(
+    app: &AppHandle,
+    snapshot: &Arc<Mutex<Snapshot>>,
+    activity: &watch::Sender<bool>,
+    value: Status,
+) {
     if let Ok(mut snapshot) = snapshot.lock() {
         let slot = Slot::new(value.kind, value.slot);
         if let Some(previous) = snapshot
@@ -357,6 +373,17 @@ fn update(app: &AppHandle, snapshot: &Arc<Mutex<Snapshot>>, value: Status) {
         } else {
             snapshot.media.push(value);
         }
+        activity.send_if_modified(|active| {
+            let connected = snapshot
+                .media
+                .iter()
+                .any(|media| media.phase == "connected");
+            if connected == *active {
+                return false;
+            }
+            *active = connected;
+            true
+        });
         crate::diagnostics::session(&app, &snapshot);
         let _ = app.emit("session-state", snapshot.clone());
     }

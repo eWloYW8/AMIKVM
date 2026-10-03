@@ -490,6 +490,13 @@ impl WebSession {
         self.config.hd_instances = count(&media, key("num_hd", "V_NUM_HD"));
         self.config.kvm_cd_instances = count(&media, key("kvm_num_cd", "V_KVM_NUM_CD"));
         self.config.kvm_hd_instances = count(&media, key("kvm_num_hd", "V_KVM_NUM_HD"));
+        // JViewer.d/e and h/i select the KVM counts for VMApp when OEM bit
+        // 128 is set. Apply that rule during discovery as well as IVTP 38,
+        // including sessions that never receive a video configuration packet.
+        if self.config.oem_features & 128 != 0 {
+            self.config.cd_instances = self.config.kvm_cd_instances;
+            self.config.hd_instances = self.config.kvm_hd_instances;
+        }
         self.config.cd_enabled = media.number(key("cd_status", "V_CD_STATUS")) == Some(1);
         self.config.hd_enabled = media.number(key("hd_status", "V_HD_STATUS")) == Some(1);
         self.config.power_save_mode = count(&media, key("power_save_mode", "V_POWER_SAVE_MODE"));
@@ -541,11 +548,17 @@ impl WebSession {
         } else {
             (Method::GET, "/rpc/WEBSES/logout.asp")
         };
-        self.request(method, path)
+        let response = self
+            .request(method, path)
             .header(header::CONTENT_LENGTH, 0)
             .send()
             .await?
             .error_for_status()?;
+        if self.config.api_mode == ApiMode::Rpc {
+            // URLProcessor.aK checks HAPI_STATUS even for logout. HTTP 200
+            // alone does not confirm that the BMC released this web session.
+            Fields::parse(response.text().await?).checked()?;
+        }
         Ok(())
     }
 }

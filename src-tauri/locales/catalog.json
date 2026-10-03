@@ -2802,5 +2802,9 @@
   "服务器组合键已变化，请重新打开编辑器": ["The server key combination changed; reopen the editor", "La combinaison du serveur a changé ; rouvrez l’éditeur"],
   "服务器组合键不支持按键：{}": ["Server key combinations do not support the key: {}", "Les combinaisons du serveur ne prennent pas en charge la touche : {}"],
   "KVM 服务配置已改变，请重新连接服务器。": ["KVM service configuration changed; reconnect to the server.", "La configuration du service KVM a changé ; reconnectez-vous au serveur."],
-  "服务器服务配置已改变，活动重定向已停止。": ["Server service configuration changed; active redirection has stopped.", "La configuration des services du serveur a changé ; les redirections actives ont été arrêtées."]
+  "服务器服务配置已改变，活动重定向已停止。": ["Server service configuration changed; active redirection has stopped.", "La configuration des services du serveur a changé ; les redirections actives ont été arrêtées."],
+  "原生序列号": [
+    "Native SN",
+    "Numéro de série natif"
+  ]
 }
