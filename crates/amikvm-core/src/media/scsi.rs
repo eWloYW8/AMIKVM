@@ -56,11 +56,13 @@ impl Image {
             && path
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("nrg"));
-        if !nrg && (length < block_size as u64 || length % block_size as u64 != 0) {
+        if length < block_size as u64 || (kind != Kind::Cdrom && length % block_size as u64 != 0) {
             return Err(Error::Invalid(
                 "Image size must be a positive multiple of its sector size".into(),
             ));
         }
+        // Optical images expose complete 2048-byte sectors, as in CDImage.W().
+        // A trailing descriptor/footer does not become a partial logical sector.
         let tracks = if nrg {
             super::nrg::tracks(&mut file)?
         } else if kind == Kind::Cdrom {

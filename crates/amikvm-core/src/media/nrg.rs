@@ -39,6 +39,40 @@ fn sector(mode: u8, size: u16) -> Result<Option<u16>> {
     }
 }
 pub fn tracks(file: &mut File) -> Result<Vec<Track>> {
+    match nero_tracks(file) {
+        Ok(tracks) => Ok(tracks),
+        Err(Error::Invalid(message)) => {
+            // JViewer accepts ISO9660/UDF sector images under the .nrg suffix
+            // without Nero chunks. Keep genuine Nero track geometry when known.
+            let length = file.metadata()?.len();
+            for (sector, offset, signature) in [
+                (16_u64, 1_u64, b"CD001".as_slice()),
+                (35, 217, b"*OSTA UDF Compliant".as_slice()),
+            ] {
+                if length < (sector + 1) * 2048 {
+                    continue;
+                }
+                file.seek(SeekFrom::Start(sector * 2048 + offset))?;
+                let mut bytes = vec![0; signature.len()];
+                file.read_exact(&mut bytes)?;
+                if bytes == signature {
+                    return Ok(vec![Track {
+                        number: 1,
+                        lba: 0,
+                        blocks: length / 2048,
+                        offset: 0,
+                        sector_size: 2048,
+                        data_offset: Some(0),
+                    }]);
+                }
+            }
+            Err(Error::Invalid(message))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn nero_tracks(file: &mut File) -> Result<Vec<Track>> {
     let length = file.metadata()?.len();
     if length < 12 {
         return Err(invalid());

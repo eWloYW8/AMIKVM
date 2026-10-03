@@ -1984,7 +1984,10 @@ async fn route(app: &AppHandle, state: State<'_, AppState>, intent: Intent) -> R
                 match kind {
                     amikvm_core::media::scsi::Kind::Cdrom => file.add_filter(
                         crate::locale::text_in(language, "CD/DVD 镜像"),
-                        &["iso", "nrg"],
+                        &[
+                            "iso", "isO", "iSo", "iSO", "Iso", "IsO", "ISo", "ISO", "nrg", "nrG",
+                            "nRg", "nRG", "Nrg", "NrG", "NRg", "NRG",
+                        ],
                     ),
                     _ => file.add_filter(
                         crate::locale::text_in(language, "磁盘镜像"),
