@@ -97,7 +97,12 @@ impl WebSession {
             })
             .await
             .map_err(|_| Error::Timeout("Single-port handshake write"))??;
-            single_port::confirmation(&mut stream).await?;
+            if single_port::confirmation(&mut stream).await? {
+                stream = Box::pin(single_port::HttpStream {
+                    stream,
+                    first_read: true,
+                });
+            }
         }
         Ok(Connection {
             stream,
