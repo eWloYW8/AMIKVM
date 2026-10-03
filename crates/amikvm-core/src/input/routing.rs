@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct Options {
     pub full_keyboard: bool,
     pub easy_paste: bool,
+    pub host: Host,
     pub text_mode: TextMode,
 }
 #[derive(Deserialize)]
@@ -14,6 +15,7 @@ pub struct Options {
 pub enum Setting {
     FullKeyboard(bool),
     EasyPaste(bool),
+    Host(Host),
     TextMode(TextMode),
 }
 impl Options {
@@ -21,7 +23,25 @@ impl Options {
         match setting {
             Setting::FullKeyboard(value) => self.full_keyboard = value,
             Setting::EasyPaste(value) => self.easy_paste = value,
+            Setting::Host(value) => self.host = value,
             Setting::TextMode(value) => self.text_mode = value,
+        }
+    }
+}
+
+/// The remote host, independent of the local platform and Unicode text mode.
+#[derive(Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Host {
+    #[default]
+    Windows,
+    Linux,
+}
+impl Host {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Windows => "windows",
+            Self::Linux => "linux",
         }
     }
 }
@@ -48,6 +68,8 @@ pub struct Modifiers {
     pub shift: bool,
     pub alt: bool,
     pub meta: bool,
+    #[serde(default, rename = "altGraph")]
+    pub alt_graph: bool,
 }
 impl Modifiers {
     pub fn bits(self) -> u8 {

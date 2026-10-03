@@ -1,4 +1,8 @@
 {
+  "远端键盘主机类型": ["Remote keyboard host type", "Type du système distant pour le clavier"],
+  "Windows 主机": ["Windows host", "Système Windows"],
+  "Linux 主机": ["Linux host", "Système Linux"],
+  "Windows 本机连接 Linux 主机时，AltGr 仅发送右 Alt，避免额外 Ctrl；此选项独立于文本输入方式。": ["When connecting from Windows to a Linux host, AltGr sends only right Alt, avoiding an extra Ctrl. This setting is independent of the text input method.", "Lors d’une connexion depuis Windows vers un système Linux, AltGr envoie uniquement Alt droit, sans Ctrl supplémentaire. Ce réglage est indépendant du mode de saisie du texte."],
   "尚未执行电源操作": ["No power operation has been requested", "Aucune opération d’alimentation demandée"],
   "等待服务器确认电源操作": ["Waiting for the server to acknowledge the power operation", "En attente de l’accusé de réception du serveur"],
   "服务器已确认电源操作": ["The server acknowledged the power operation", "Le serveur a confirmé l’opération d’alimentation"],

@@ -2783,6 +2783,19 @@ fn mouse_capture(server: &Server, snapshot: Option<&Snapshot>, enabled: bool) ->
 fn keyboard_options(server: &Server, snapshot: Option<&Snapshot>, enabled: bool) -> Node {
     let options = snapshot.map_or(Default::default(), |s| s.keyboard_options);
     let mut children = vec![
+        select(
+            "keyboard_host",
+            tr("远端键盘主机类型"),
+            &[("windows", tr("Windows 主机")), ("linux", tr("Linux 主机"))],
+            json!({"value":options.host.id(),"disabled":!enabled,"action":{"action":"keyboard_option","id":server.id,"setting":"host"}}),
+        ),
+        label(
+            "p",
+            "input-help",
+            tr(
+                "Windows 本机连接 Linux 主机时，AltGr 仅发送右 Alt，避免额外 Ctrl；此选项独立于文本输入方式。",
+            ),
+        ),
         field(
             "full_keyboard",
             tr("全键盘支持"),

@@ -9,6 +9,7 @@ pub mod encryption;
 pub mod layout;
 pub mod macros;
 pub mod mouse;
+pub mod physical;
 pub mod pointer;
 pub mod routing;
 
@@ -23,6 +24,8 @@ pub enum Event {
     },
     Key {
         code: String,
+        #[serde(default)]
+        key: String,
         pressed: bool,
         #[serde(default)]
         modifiers: Option<routing::Modifiers>,
@@ -99,14 +102,50 @@ impl Keyboard {
 /// Physical focus loss must not release the software keyboard's latched modifiers.
 #[derive(Default)]
 pub struct State {
-    physical: Keyboard,
+    physical: physical::Keyboard,
     software: Keyboard,
 }
 
 impl State {
-    pub fn key(&mut self, code: &str, pressed: bool) -> Option<[u8; 8]> {
-        self.physical.key(code, pressed)?;
-        Some(self.report())
+    pub fn physical_key(
+        &mut self,
+        code: &str,
+        pressed: bool,
+        key: &str,
+        modifiers: Option<routing::Modifiers>,
+        host: routing::Host,
+    ) -> Vec<[u8; 8]> {
+        let software = self.software.report();
+        self.physical
+            .key(
+                code,
+                pressed,
+                key,
+                modifiers,
+                physical::Client::current(),
+                host,
+            )
+            .into_iter()
+            .map(|report| merge_reports(report, software))
+            .collect()
+    }
+    pub fn release_key(&mut self, code: &str) {
+        self.physical.release_key(code);
+    }
+    pub fn flush_physical(&mut self) -> Option<[u8; 8]> {
+        let report = self.physical.flush_pending()?;
+        Some(merge_reports(report, self.software.report()))
+    }
+    pub fn idle(&self) -> bool {
+        self.physical.idle() && self.software.report() == [0; 8]
+    }
+    pub fn local_modifiers(&self, key: &str, modifiers: Option<routing::Modifiers>) -> Option<u8> {
+        if key == "AltGraph" || modifiers.is_some_and(|m| m.alt_graph) || self.physical.alt_graph()
+        {
+            None
+        } else {
+            Some(modifiers.map_or_else(|| self.report()[0], routing::Modifiers::bits))
+        }
     }
     pub fn soft_key(&mut self, code: &str, pressed: bool) -> Option<[u8; 8]> {
         self.software.key(code, pressed)?;

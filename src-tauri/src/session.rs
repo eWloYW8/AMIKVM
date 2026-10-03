@@ -1966,6 +1966,7 @@ impl Session {
         }
         if let Event::Key {
             code,
+            key,
             pressed,
             modifiers,
         } = &event
@@ -1986,7 +1987,7 @@ impl Session {
                         && matches!(ui.dialog, crate::ui::Dialog::None)
                 });
             if !active_console {
-                self.keyboard.lock().await.key(code, false);
+                self.keyboard.lock().await.release_key(code);
                 return Ok(());
             }
             let local = if *pressed {
@@ -1995,12 +1996,13 @@ impl Session {
                     .lock()
                     .map(|s| (s.keyboard_options, s.mouse_mode))
                     .map_err(|_| Error::Invalid("Session unavailable".into()))?;
-                let modifiers = if let Some(modifiers) = modifiers {
-                    modifiers.bits()
-                } else {
-                    self.keyboard.lock().await.report()[0]
-                };
-                input::routing::local(code, modifiers, options, mouse_mode)
+                self.keyboard
+                    .lock()
+                    .await
+                    .local_modifiers(key, *modifiers)
+                    .and_then(|modifiers| {
+                        input::routing::local(code, modifiers, options, mouse_mode)
+                    })
             } else {
                 None
             };
@@ -2143,7 +2145,7 @@ impl Session {
                     })
                     .unwrap_or(true);
             if blocked {
-                self.keyboard.lock().await.key(code, false);
+                self.keyboard.lock().await.release_key(code);
                 return Ok(());
             }
             let token = self
@@ -2165,16 +2167,27 @@ impl Session {
             }
         }
         match &event {
-            Event::Key { code, pressed, .. } => {
+            Event::Key {
+                code,
+                key,
+                pressed,
+                modifiers,
+            } => {
                 let mut keyboard = self.keyboard.lock().await;
                 if let Err(error) = self.input_ready() {
                     if !pressed {
-                        keyboard.key(code, false);
+                        keyboard.release_key(code);
                         return Ok(());
                     }
                     return Err(error);
                 }
-                if let Some(report) = keyboard.key(code, *pressed) {
+                let host = self
+                    .snapshot
+                    .lock()
+                    .map_err(|_| Error::Invalid("Session unavailable".into()))?
+                    .keyboard_options
+                    .host;
+                for report in keyboard.physical_key(code, *pressed, key, *modifiers, host) {
                     self.send_keyboard(&mut keyboard, report).await?;
                 }
             }
@@ -2205,8 +2218,14 @@ impl Session {
                 self.release_input(matches!(event, Event::ReleaseAll))
                     .await?
             }
-            Event::Pointer { .. } => {
+            Event::Pointer { buttons, wheel, .. } => {
                 self.input_ready()?;
+                if *buttons != 0 || *wheel != 0.0 {
+                    let mut keyboard = self.keyboard.lock().await;
+                    if let Some(report) = keyboard.flush_physical() {
+                        self.send_keyboard(&mut keyboard, report).await?;
+                    }
+                }
                 self.sender
                     .send(Outgoing::Mouse(crate::mouse::Operation::Pointer(event)))
                     .await
@@ -2250,7 +2269,7 @@ impl Session {
     /// successful key-down even if focus is lost during the 35 ms interval.
     pub async fn sync_locks(&self, token: Uuid, desired: u8, mask: u8) -> Result<bool> {
         let keyboard = self.keyboard.lock().await;
-        if keyboard.report() != [0; 8] || self.key_input_ready().is_err() {
+        if !keyboard.idle() || self.key_input_ready().is_err() {
             return Ok(false);
         }
         let id = self
