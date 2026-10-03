@@ -73,8 +73,15 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
     let observer = Rc::new(RefCell::new(Keyboard::new(&seat, bridge.clone())));
     let pressed = bridge.clone();
     let source = seat.clone();
+    let keyboard = observer.clone();
     window.connect_key_press_event(move |_, event| {
-        if pressed.active.get() && !event.is_send_event() && event.seat().as_ref() == Some(&source)
+        if pressed.active.get()
+            && !event.is_send_event()
+            && event.seat().as_ref() == Some(&source)
+            && keyboard
+                .borrow()
+                .as_ref()
+                .is_some_and(|k| event.source_device().as_ref() == Some(&k.device))
         {
             let releases = pressed.keys.borrow_mut().capture(
                 event.hardware_keycode(),
@@ -88,8 +95,15 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
     });
     let released = bridge.clone();
     let source = seat.clone();
+    let keyboard = observer.clone();
     window.connect_key_release_event(move |_, event| {
-        if released.active.get() && !event.is_send_event() && event.seat().as_ref() == Some(&source)
+        if released.active.get()
+            && !event.is_send_event()
+            && event.seat().as_ref() == Some(&source)
+            && keyboard
+                .borrow()
+                .as_ref()
+                .is_some_and(|k| event.source_device().as_ref() == Some(&k.device))
         {
             released
                 .keys
@@ -105,18 +119,25 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
     });
     let available = observer.clone();
     let incoming = bridge.clone();
-    seat.connect_device_added(move |seat, _| {
-        if incoming.active.get() && available.borrow().is_none() {
+    seat.connect_device_added(move |seat, device| {
+        // GDK forwards the manager's events to every Wayland seat. Ignore
+        // other seats, master devices and non-keyboard changes.
+        if incoming.active.get() && is_keyboard(seat, device) && available.borrow().is_none() {
             *available.borrow_mut() = Keyboard::new(seat, incoming.clone());
         }
     });
     let removed = bridge.clone();
-    seat.connect_device_removed(move |seat, _| {
-        if !seat
-            .capabilities()
-            .contains(gdk::SeatCapabilities::KEYBOARD)
+    let keyboard = observer.clone();
+    seat.connect_device_removed(move |_, device| {
+        // GDK detaches the slave (changing it to Floating) before this signal,
+        // but still returns it in seat.slaves(). Match our device identity.
+        if keyboard
+            .borrow()
+            .as_ref()
+            .is_some_and(|k| &k.device == device)
         {
             removed.keys.borrow_mut().clear();
+            keyboard.borrow_mut().take();
         }
     });
     let removed = bridge.clone();
@@ -135,6 +156,12 @@ fn attach(window: &gtk::Window, seat: gdk::Seat) {
         bridge.keys.borrow_mut().clear();
         observer.borrow_mut().take();
     });
+}
+
+fn is_keyboard(seat: &gdk::Seat, device: &gdk::Device) -> bool {
+    device.device_type() == gdk::DeviceType::Slave
+        && device.source() == gdk::InputSource::Keyboard
+        && device.seat().as_ref() == Some(seat)
 }
 
 #[repr(C)]
@@ -180,16 +207,17 @@ struct Listener {
 }
 struct Keyboard {
     proxy: *mut c_void,
+    device: gdk::Device,
     _bridge: Box<Rc<Bridge>>,
 }
 impl Keyboard {
     fn new(seat: &gdk::Seat, bridge: Rc<Bridge>) -> Option<Self> {
-        if !seat
-            .capabilities()
-            .contains(gdk::SeatCapabilities::KEYBOARD)
-        {
-            return None;
-        }
+        // Wayland GDK retains its master keyboard even without the protocol
+        // capability. Only an actual slave permits wl_seat.get_keyboard.
+        let device = seat
+            .slaves(gdk::SeatCapabilities::KEYBOARD)
+            .into_iter()
+            .find(|device| is_keyboard(seat, device))?;
         // Borrow only GDK's wl_seat; the new wl_keyboard and its listener data
         // belong to this guard and share GDK's main-thread event queue.
         unsafe {
@@ -211,6 +239,7 @@ impl Keyboard {
             }
             let mut observer = Self {
                 proxy,
+                device,
                 _bridge: Box::new(bridge),
             };
             if wl_proxy_add_listener(
