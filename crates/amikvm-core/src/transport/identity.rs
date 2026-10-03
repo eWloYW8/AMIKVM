@@ -129,11 +129,19 @@ mod native {
             if entry.ifa_name.is_null() {
                 continue;
             }
-            let name = unsafe { CStr::from_ptr(entry.ifa_name) }
-                .to_bytes()
-                .to_vec();
-            let interface = result.entry(name).or_insert_with(|| Interface {
-                ipv6_index: unsafe { libc::if_nametoindex(entry.ifa_name) },
+            let index = unsafe { libc::if_nametoindex(entry.ifa_name) };
+            // IPv4 labels (e.g. eth0:kvm) share the underlying link's index,
+            // even though their getifaddrs names differ from its MAC record.
+            // Preserve names for unknown indexes instead of merging unrelated links.
+            let name = if index == 0 {
+                unsafe { CStr::from_ptr(entry.ifa_name) }
+                    .to_bytes()
+                    .to_vec()
+            } else {
+                vec![]
+            };
+            let interface = result.entry((index, name)).or_insert_with(|| Interface {
+                ipv6_index: index,
                 ips: vec![],
                 mac: None,
             });
