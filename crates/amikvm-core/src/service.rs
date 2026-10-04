@@ -1,4 +1,4 @@
-//! Live IVTP service configuration (37), media configuration (38/56), and end reasons.
+//! Live IVTP service configuration (37), media configuration (38), availability (56), and end reasons.
 //! Layouts checked against ConfPkt/KVMClient in the original JAR.
 use crate::{Error, Result, auth::SessionConfig};
 use serde::Serialize;
@@ -191,9 +191,15 @@ impl MediaConfiguration {
 pub struct State {
     pub services: Vec<Service>,
     pub media: Option<MediaConfiguration>,
+    pub available_instances: Option<AvailableInstances>,
     pub changes: Vec<Change>,
     pub revision: u64,
     pub notice: Option<&'static str>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct AvailableInstances {
+    pub cd: u8,
+    pub hd: u8,
 }
 #[derive(Default)]
 pub struct Effect {
@@ -268,23 +274,23 @@ impl State {
         self.media = Some(next);
         Ok(stop)
     }
-    pub fn receive_instances(&mut self, bytes: &[u8], config: &mut SessionConfig) -> Result<bool> {
+    pub fn receive_instances(&mut self, bytes: &[u8]) -> Result<()> {
         if bytes.len() < 8 {
             return Err(invalid("Invalid media instance packet length"));
         }
-        let (cd, hd) = (count(integer(bytes, 0))?, count(integer(bytes, 4))?);
-        let changed = (cd, hd) != (config.cd_instances, config.hd_instances);
-        if changed {
-            config.cd_instances = cd;
-            config.hd_instances = hd;
-            if config.oem_features & 128 != 0 {
-                config.kvm_cd_instances = cd;
-                config.kvm_hd_instances = hd;
-            }
-            self.revision = self.revision.saturating_add(1);
-            self.notice = Some("虚拟介质实例配置已改变，活动重定向已停止。");
-        }
-        Ok(changed)
+        // KVMClient.i -> JVAPP.aC/aD -> VMPane.bz updates free-instance
+        // counts and disables unused slots. Connected slots are left alone.
+        // These counts commonly drop to zero when our own mount succeeds;
+        // they are not the configured totals in IVTP 38 / SessionConfig.
+        self.available_instances = Some(AvailableInstances {
+            cd: count(integer(bytes, 0))?,
+            hd: count(integer(bytes, 4))?,
+        });
+        Ok(())
+    }
+    pub fn media_available(&self, cd: bool) -> bool {
+        self.available_instances
+            .is_none_or(|counts| if cd { counts.cd > 0 } else { counts.hd > 0 })
     }
 }
 pub fn end_reason(status: u16) -> Option<&'static str> {

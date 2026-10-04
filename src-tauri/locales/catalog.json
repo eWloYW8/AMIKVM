@@ -2803,6 +2803,14 @@
   "服务器组合键不支持按键：{}": ["Server key combinations do not support the key: {}", "Les combinaisons du serveur ne prennent pas en charge la touche : {}"],
   "KVM 服务配置已改变，请重新连接服务器。": ["KVM service configuration changed; reconnect to the server.", "La configuration du service KVM a changé ; reconnectez-vous au serveur."],
   "服务器服务配置已改变，活动重定向已停止。": ["Server service configuration changed; active redirection has stopped.", "La configuration des services du serveur a changé ; les redirections actives ont été arrêtées."],
+  "BMC 暂无可用介质实例，请等待释放后重试": ["The BMC has no free media instances; retry after one is released", "Le BMC n’a aucun emplacement de média disponible ; réessayez après sa libération"],
+  "介质连接已因配置更新、权限切换或会话关闭而取消": ["Media connection cancelled because configuration, control permission or session state changed", "Connexion du média annulée après un changement de configuration, de droit de contrôle ou d’état de session"],
+  "会话已关闭，介质重定向已停止。": ["The session closed; media redirection has stopped.", "La session est fermée ; la redirection des médias a été arrêtée."],
+  "控制权限已转交，介质重定向已停止。": ["Control is being transferred; media redirection has stopped.", "Le contrôle est en cours de transfert ; la redirection des médias a été arrêtée."],
+  "已失去控制权限，介质重定向已停止。": ["Control permission was lost; media redirection has stopped.", "Le droit de contrôle a été perdu ; la redirection des médias a été arrêtée."],
+  "服务器介质配置已改变，活动重定向已停止。": ["Server media configuration changed; active redirection has stopped.", "La configuration des médias du serveur a changé ; les redirections actives ont été arrêtées."],
+  "虚拟介质许可证状态已改变，活动重定向已停止。": ["The virtual media license state changed; active redirection has stopped.", "L’état de la licence des médias virtuels a changé ; les redirections actives ont été arrêtées."],
+  "KVM 连接已关闭，介质重定向已停止。": ["The KVM connection closed; media redirection has stopped.", "La connexion KVM est fermée ; la redirection des médias a été arrêtée."],
   "原生序列号": [
     "Native SN",
     "Numéro de série natif"

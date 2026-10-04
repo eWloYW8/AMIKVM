@@ -148,6 +148,15 @@ pub fn session(app: &AppHandle, s: &crate::session::Snapshot) {
         json!({"revision":s.service.revision,"changes":s.service.changes,"notice":s.service.notice}),
         Level::Info,
     );
+    changed(
+        app,
+        Category::Media,
+        id,
+        "available-instances",
+        "可用介质实例数已更新",
+        json!({"available":s.service.available_instances}),
+        Level::Info,
+    );
     for media in &s.media {
         let key = match media.kind {
             amikvm_core::media::scsi::Kind::Cdrom => "cd",

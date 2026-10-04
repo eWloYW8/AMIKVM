@@ -89,7 +89,8 @@ impl Status {
 
 pub struct Redirector {
     pub status: watch::Receiver<Status>,
-    cancel: watch::Sender<bool>,
+    // None keeps the redirect running; Some carries the local stop reason.
+    cancel: watch::Sender<Option<String>>,
     finished: watch::Receiver<bool>,
 }
 impl Redirector {
@@ -190,7 +191,7 @@ impl Redirector {
         let physical = image.lock().unwrap().physical();
         let (device_tx, mut device_rx) = watch::channel(Some(status.capacity));
         let (status_tx, status_rx) = watch::channel(status);
-        let (cancel, mut cancel_rx) = watch::channel(false);
+        let (cancel, mut cancel_rx) = watch::channel(None::<String>);
         let monitor = if physical {
             let image = image.clone();
             let mut cancel = cancel.subscribe();
@@ -242,7 +243,7 @@ impl Redirector {
                         tokio::select! {
                             _ = cancel_rx.changed() => break None,
                             changed=device_rx.changed(),if physical => {
-                                if *cancel_rx.borrow(){break None;}
+                                if cancel_rx.borrow().is_some(){break None;}
                                 let capacity=*device_rx.borrow_and_update();
                                 if capacity.is_none(){stop_reason="removed";break None;}
                                 if changed.is_err(){return Err(Error::Protocol("Physical device monitor stopped".into()));}
@@ -307,9 +308,15 @@ impl Redirector {
                 }
                 Ok(())
             }.await;
+            if stop_reason == "disconnected" {
+                state.message = cancel_rx
+                    .borrow()
+                    .clone()
+                    .filter(|reason| !reason.is_empty());
+            }
             // Complete any native poll before releasing device handles/volume locks.
             if let Some(monitor) = monitor {
-                let _ = monitor_cancel.send(true);
+                let _ = monitor_cancel.send(Some(String::new()));
                 let _ = monitor.await;
             }
             let disconnect = Packet::command(247, state.instance, &[]).encode();
@@ -350,7 +357,10 @@ impl Redirector {
         })
     }
     pub async fn stop(&self) {
-        let _ = self.cancel.send(true);
+        self.stop_with_reason("").await;
+    }
+    pub async fn stop_with_reason(&self, reason: &str) {
+        self.request_stop(reason);
         let mut finished = self.finished.clone();
         while !*finished.borrow_and_update() {
             if finished.changed().await.is_err() {
@@ -358,9 +368,18 @@ impl Redirector {
             }
         }
     }
+    fn request_stop(&self, reason: &str) {
+        self.cancel.send_if_modified(|value| {
+            if value.is_some() {
+                return false;
+            }
+            *value = Some(reason.to_owned());
+            true
+        });
+    }
 }
 impl Drop for Redirector {
     fn drop(&mut self) {
-        let _ = self.cancel.send(true);
+        self.request_stop("");
     }
 }

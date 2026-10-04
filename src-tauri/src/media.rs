@@ -140,6 +140,11 @@ impl Manager {
             if snapshot.video_connected && !snapshot.can_control {
                 return Err(Error::Authentication("仅查看会话不能启动介质重定向".into()));
             }
+            if !snapshot.service.media_available(kind == Kind::Cdrom) {
+                return Err(Error::Invalid(
+                    "BMC 暂无可用介质实例，请等待释放后重试".into(),
+                ));
+            }
         }
         if let Source::Image(path) = source {
             source = Source::Image(
@@ -246,7 +251,9 @@ impl Manager {
                 .is_ok_and(|s| s.video_connected && !s.can_control)
         {
             drop(registry);
-            redirector.stop().await;
+            redirector
+                .stop_with_reason("介质连接已因配置更新、权限切换或会话关闭而取消")
+                .await;
             self.update(redirector.status.borrow().clone());
             self.registry.lock().await.pending.remove(&slot);
             return Err(Error::Invalid(
@@ -310,18 +317,22 @@ impl Manager {
     }
     pub async fn stop_all(&self) {
         self.closed.store(true, Ordering::Release);
-        self.stop_active().await;
+        self.stop_active("会话已关闭，介质重定向已停止。").await;
     }
-    pub async fn reconfigure(&self, config: amikvm_core::auth::SessionConfig) {
+    pub async fn reconfigure(
+        &self,
+        config: amikvm_core::auth::SessionConfig,
+        reason: &'static str,
+    ) {
         let _operation = self.configuration.lock().await;
         self.reconfiguring.store(true, Ordering::Release);
-        self.stop_active().await;
+        self.stop_active(reason).await;
         let mut web = self.web.lock().unwrap();
         *web = Arc::new(web.with_config(config));
         self.reconfiguring.store(false, Ordering::Release);
     }
     // Ending current redirects must allow new redirects after control is regained.
-    pub async fn stop_active(&self) {
+    pub async fn stop_active(&self, reason: &'static str) {
         let (handles, pending) = {
             let registry = self.registry.lock().await;
             // Invalidate and collect under the same lock used by start. A new
@@ -342,7 +353,7 @@ impl Manager {
             let snapshot = self.snapshot.clone();
             let activity = self.activity.clone();
             tasks.spawn(async move {
-                handle.stop().await;
+                handle.stop_with_reason(reason).await;
                 update(&app, &snapshot, &activity, handle.status.borrow().clone());
             });
         }

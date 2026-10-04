@@ -1787,15 +1787,17 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             let config = snapshot.config.as_ref()?;
             let slots: Vec<_> = (0..config.hd_instances)
                 .filter(|slot| {
-                    !snapshot.media.iter().any(|m| {
-                        m.kind != amikvm_core::media::scsi::Kind::Cdrom
-                            && m.slot == *slot
-                            && m.active()
-                    }) && !ui.folders.iter().any(|f| {
-                        f.server_id == id
-                            && f.slot == *slot
-                            && matches!(f.phase, "creating" | "connected")
-                    })
+                    snapshot.service.media_available(false)
+                        && !snapshot.media.iter().any(|m| {
+                            m.kind != amikvm_core::media::scsi::Kind::Cdrom
+                                && m.slot == *slot
+                                && m.active()
+                        })
+                        && !ui.folders.iter().any(|f| {
+                            f.server_id == id
+                                && f.slot == *slot
+                                && matches!(f.phase, "creating" | "connected")
+                        })
                 })
                 .collect();
             let mut selector = field(
@@ -1805,6 +1807,9 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                 json!({"required":true}),
             );
             selector.props["options"] = json!(slots.iter().map(|slot| json!({"value":slot.to_string(),"label":lformat!("实例 {}", slot + 1)})).collect::<Vec<_>>());
+            let mut footer = actions(tr("选择文件夹和工作镜像"));
+            footer.children[1].props["disabled"] =
+                json!(slots.is_empty() || snapshot.phase != "connected");
             (
                 format!("folder-{id}"),
                 "modal small",
@@ -1825,7 +1830,7 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
                         "checkbox",
                         json!({"className":"checkbox"}),
                     ),
-                    actions(tr("选择文件夹和工作镜像")),
+                    footer,
                 ],
             )
         }
@@ -1921,10 +1926,11 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             };
             let slots: Vec<_> = (0..count)
                 .filter(|slot| {
-                    !snapshot
-                        .media
-                        .iter()
-                        .any(|m| (m.kind == Kind::Cdrom) == cd && m.slot == *slot && m.active())
+                    snapshot.service.media_available(cd)
+                        && !snapshot
+                            .media
+                            .iter()
+                            .any(|m| (m.kind == Kind::Cdrom) == cd && m.slot == *slot && m.active())
                         && (cd
                             || !ui.folders.iter().any(|f| {
                                 f.server_id == id && f.slot == *slot && f.phase == "creating"
@@ -2016,14 +2022,13 @@ fn dialog(ui: &UiState, servers: &[Server], sessions: &[Snapshot]) -> Option<Nod
             } else {
                 tr("选择镜像并连接")
             });
-            if physical {
-                footer.children[1].props["disabled"] = json!(
-                    ui.devices.loading
-                        || !ui.devices.entries.iter().any(|d| d.kind == kind)
-                        || slots.is_empty()
-                        || snapshot.phase != "connected"
-                );
-            }
+            footer.children[1].props["disabled"] = json!(
+                slots.is_empty()
+                    || snapshot.phase != "connected"
+                    || (physical
+                        && (ui.devices.loading
+                            || !ui.devices.entries.iter().any(|d| d.kind == kind)))
+            );
             fields.push(footer);
             fields.push(button("button secondary wide",if physical{tr("改用镜像文件")}else{tr("选择实体设备")},"HardDrive",json!({"action":if physical{"media_dialog"}else{"physical_media_dialog"},"id":id,"kind":kind}),false));
             (
@@ -3608,12 +3613,13 @@ fn media(server: &Server, snapshot: Option<&Snapshot>) -> Node {
                 .filter(|m| (m.kind == Kind::Cdrom) == cd && m.active())
                 .count()
         });
+        let available = snapshot.is_none_or(|s| s.service.media_available(cd));
         children.push(button(
             "button secondary wide",
             title,
             "",
             json!({"action":"media_dialog","id":server.id,"kind":kind}),
-            !allowed || !enabled || occupied >= count as usize,
+            !allowed || !enabled || !available || occupied >= count as usize,
         ));
     }
     if let Some(snapshot) = snapshot {
@@ -3716,18 +3722,21 @@ fn folders(ui: &UiState, server: &Server, snapshot: Option<&Snapshot>) -> Node {
     let config = snapshot.and_then(|s| s.config.as_ref());
     let allowed = snapshot.is_some_and(|s| s.phase == "connected")
         && config.is_some_and(|c| c.privileges & 2 != 0 && c.hd_enabled);
-    let free = config.is_some_and(|c| {
-        (0..c.hd_instances).any(|slot| {
-            !snapshot.is_some_and(|s| {
-                s.media.iter().any(|m| {
-                    m.kind != amikvm_core::media::scsi::Kind::Cdrom && m.slot == slot && m.active()
-                })
-            }) && !ui
-                .folders
-                .iter()
-                .any(|f| f.server_id == server.id && f.slot == slot && f.phase == "creating")
-        })
-    });
+    let free = snapshot.is_none_or(|s| s.service.media_available(false))
+        && config.is_some_and(|c| {
+            (0..c.hd_instances).any(|slot| {
+                !snapshot.is_some_and(|s| {
+                    s.media.iter().any(|m| {
+                        m.kind != amikvm_core::media::scsi::Kind::Cdrom
+                            && m.slot == slot
+                            && m.active()
+                    })
+                }) && !ui
+                    .folders
+                    .iter()
+                    .any(|f| f.server_id == server.id && f.slot == slot && f.phase == "creating")
+            })
+        });
     let mut children = vec![
         group(
             "div",

@@ -666,7 +666,7 @@ impl Session {
                                         if let Err(error) = crate::mouse::release(&mut writer, &writer_snapshot, &writer_sequence, cipher.as_ref(), &mut pointer).await { break 'writer Err(error); }
                                         had_input = false;
                                     }
-                                    writer_media.stop_active().await;
+                                    writer_media.stop_active("控制权限已转交，介质重定向已停止。").await;
                                     if !writer_snapshot.lock().is_ok_and(|s| s.sharing.role == amikvm_core::sharing::Role::Master && s.sharing.handoff.is_some()) {
                                         if let Some(reply) = reply { let _ = reply.send(Err(Error::Invalid("Control permission changed before transfer".into()))); }
                                         continue;
@@ -1142,7 +1142,7 @@ impl Session {
                                 });
                             }
                             if effect.lost_control {
-                                worker_media.stop_active().await;
+                                worker_media.stop_active("已失去控制权限，介质重定向已停止。").await;
                             }
                             if let Some(reply) = effect.reply {
                                 worker_sender
@@ -1166,8 +1166,8 @@ impl Session {
                                 .await
                                 .map_err(|_| Error::Io(std::io::ErrorKind::ConnectionAborted.into()))?;
                         }
-                        37 | 38 | 56 => {
-                            let (changed, close, config) = {
+                        37 | 38 => {
+                            let (changed, close, config, reason) = {
                                 let mut snapshot = worker_snapshot
                                     .lock()
                                     .map_err(|_| Error::Invalid("Session unavailable".into()))?;
@@ -1191,10 +1191,7 @@ impl Session {
                                             Some(media.host_display_control);
                                         (changed, false)
                                     }
-                                    _ => (
-                                        snapshot.service.receive_instances(&body, &mut config)?,
-                                        false,
-                                    ),
+                                    _ => unreachable!(),
                                 };
                                 if close {
                                     snapshot.phase = "disconnected".into();
@@ -1202,14 +1199,25 @@ impl Session {
                                     snapshot.message = snapshot.service.notice.map(str::to_owned);
                                 }
                                 snapshot.config = Some(config.clone());
-                                (changed, close, config)
+                                (changed, close, config, snapshot.service.notice.unwrap_or("服务器介质配置已改变，活动重定向已停止。"))
                             };
                             if close {
                                 break;
                             }
                             if changed {
-                                worker_media.reconfigure(config).await;
+                                worker_media.reconfigure(config, reason).await;
                             }
+                            update(&app, &worker_snapshot, |_| {});
+                        }
+                        56 => {
+                            {
+                                let mut snapshot = worker_snapshot.lock()
+                                    .map_err(|_| Error::Invalid("Session unavailable".into()))?;
+                                snapshot.service.receive_instances(&body)?;
+                            }
+                            // A successful mount consumes a free instance. This
+                            // notification must never cancel that mount or change
+                            // the configuration used to allocate local slots.
                             update(&app, &worker_snapshot, |_| {});
                         }
                         40 => {
@@ -1276,7 +1284,7 @@ impl Session {
                             if let Some(config) = config {
                                 // JVAPP.C stops active redirects whenever the
                                 // media-license state changes, without closing KVM.
-                                worker_media.reconfigure(config).await;
+                                worker_media.reconfigure(config, "虚拟介质许可证状态已改变，活动重定向已停止。").await;
                                 update(&app, &worker_snapshot, |_| {});
                             }
                         }
@@ -1395,7 +1403,9 @@ impl Session {
                     s.bandwidth_measuring = false;
                     s.bandwidth_requested = None;
                 });
-                worker_media.stop_active().await;
+                worker_media
+                    .stop_active("KVM 连接已关闭，介质重定向已停止。")
+                    .await;
                 let recording_guard = worker_recording_operation.lock().await;
                 let recording = worker_video
                     .lock()
